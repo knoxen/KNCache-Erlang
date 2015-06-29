@@ -1,0 +1,12 @@
+{application, kncache,
+ [{description, "Simple cache w/ TTL"}
+ ,{vsn, "0.1.0"}
+ ,{registered, []}
+ ,{mod, {kncache_app, []}}
+ ,{applications,
+   [kernel
+   ,stdlib
+   ]}
+  ,{env, []}
+ ,{modules, []}
+ ]}.
