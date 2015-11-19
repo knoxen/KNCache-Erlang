@@ -49,21 +49,21 @@ first(Cache) ->
 info(Cache) ->
   gen_server:call(?CACHE_SRV, {info, Cache}).
 
-info(Cache, Key) ->
-  gen_server:call(?CACHE_SRV, {info, Cache, Key}).
+info(Key, Cache) ->
+  gen_server:call(?CACHE_SRV, {info, Key, Cache}).
 
-put(Cache, Key, Value) ->
-  gen_server:call(?CACHE_SRV, {put, Cache, Key, Value}).
+put(Key, Value, Cache) ->
+  gen_server:call(?CACHE_SRV, {put, Key, Value, Cache}).
 
-get(Cache, Key) ->
-  gen_server:call(?CACHE_SRV, {get, Cache, Key}).
+get(Key, Cache) ->
+  gen_server:call(?CACHE_SRV, {get, Key, Cache}).
 
-get(Cache, Key, ValueFn) ->
-  gen_server:call(?CACHE_SRV, {get, Cache, Key, ValueFn}).
+get(Key, ValueFn, Cache) ->
+  gen_server:call(?CACHE_SRV, {get, Key, ValueFn, Cache}).
 
 %% Flush contents of cache
 flush(Cache) ->
   gen_server:call(?CACHE_SRV, {flush, Cache}).
 
 delete(Cache, Key) ->
-  gen_server:cast(?CACHE_SRV, {delete, Cache, Key}).
+  gen_server:cast(?CACHE_SRV, {delete, Key, Cache}).

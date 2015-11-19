@@ -57,7 +57,7 @@ handle_call({info, Cache}, _From, Caches) ->
             {reply, [{size, Size}, {kbs, Kbs}, {retain, Retain}], Caches}
         end);
 
-handle_call({info, Cache, Key}, _From, Caches) ->
+handle_call({info, Key, Cache}, _From, Caches) ->
   reply(Cache, Caches,
         fun() ->
             Expiry =
@@ -75,7 +75,6 @@ handle_call({info, Cache, Key}, _From, Caches) ->
                 [] ->
                   undefined
               end,
-
             {reply, {expiry, Expiry}, Caches}
         end);
             
@@ -92,26 +91,23 @@ handle_call({retain, Cache, Retain}, _From, Caches) ->
             {reply, ok, Caches2}
         end);
 
-handle_call({put, Cache, Key, Value}, _From, Caches) ->
+handle_call({put, Key, Value, Cache}, _From, Caches) ->
   reply(Cache, Caches,
         fun() ->
             case maps:is_key(Cache, Caches) of
               true ->
-                cache_put(Cache, Key, Value, retain(Cache, Caches)),
+                cache_put(Key, Value, Cache, retain(Cache, Caches)),
                 {reply, ok, Caches};
               false ->
                 {reply, skip, Caches}
             end
         end);
 
-handle_call({get, Cache, Key}, From, Caches) ->
-  handle_call({get, Cache, Key, 
-               fun() -> 
-                   undefined
-               end},
-              From, Caches);
+handle_call({get, Key, Cache}, From, Caches) ->
+  ValueFn = fun() -> undefined end,
+  handle_call({get, Key, ValueFn, Cache}, From, Caches);
 
-handle_call({get, Cache, Key, ValueFn}, _From, Caches) ->
+handle_call({get, Key, ValueFn, Cache}, _From, Caches) ->
   reply(Cache, Caches,
         fun() ->
             Value =
@@ -121,7 +117,7 @@ handle_call({get, Cache, Key, ValueFn}, _From, Caches) ->
                   %% Cancel the current timer
                   erlang:cancel_timer(TimeRef),
                   %% Put the value back in the cache to start a new timer
-                  cache_put(Cache, Key, Val, retain(Cache, Caches)),
+                  cache_put(Key, Val, Cache, retain(Cache, Caches)),
                   {ok, Val};
                 %% Infinite cached value
                 [{Key, Val}] ->
@@ -134,7 +130,7 @@ handle_call({get, Cache, Key, ValueFn}, _From, Caches) ->
                       undefined;
                     NewValue ->
                       %% Cache and return newly created value
-                      cache_put(Cache, Key, NewValue, retain(Cache, Caches)),
+                      cache_put(Key, NewValue, Cache, retain(Cache, Caches)),
                       {ok, NewValue}
                   end
               end,
@@ -167,10 +163,10 @@ handle_call(Req, _From, Caches) ->
 %%
 %% Handle casts
 %%
-handle_cast({delete, Cache, Key}, Caches) ->
+handle_cast({delete, Key, Cache}, Caches) ->
   case maps:is_key(Cache, Caches) of
     true ->
-      cache_delete(Cache, Key);
+      cache_delete(Key, Cache);
     false ->
       skip
   end,
@@ -182,10 +178,10 @@ handle_cast(_Msg, Caches) ->
 %%
 %% Handle info
 %%
-handle_info({delete, Cache, Key}, Caches) ->
+handle_info({delete, Key, Cache}, Caches) ->
   case maps:is_key(Cache, Caches) of
     true ->
-      ets:delete(cache_name(Cache), Key);
+      ets:delete(Key, cache_name(Cache));
     false ->
       skip
   end,
@@ -228,18 +224,17 @@ retain(Cache, Caches) ->
       Retain
   end.
 
-cache_put(Cache, Key, Value, infinity) ->
+cache_put(Key, Value, Cache, infinity) ->
   ets:insert(cache_name(Cache), {Key, Value}),
   ok;
-cache_put(Cache, Key, Value, Retain) ->
-  TimeRef = erlang:send_after(Retain*1000, ?CACHE_SRV, {delete, Cache, Key}),
-  ets:insert(cache_name(Cache), 
-                 {Key, {{time_ref, TimeRef}, {value, Value}}}),
+cache_put(Key, Value, Cache, Retain) ->
+  TimeRef = erlang:send_after(Retain*1000, ?CACHE_SRV, {delete, Key, Cache}),
+  ets:insert(cache_name(Cache),
+             {Key, {{time_ref, TimeRef}, {value, Value}}}),
   ok.
 
-cache_delete(Cache, Key) ->  
+cache_delete(Key, Cache) ->
   CacheName = cache_name(Cache),
-
   case ets:lookup(CacheName, Key) of
     [{Key, {{time_ref, TimeRef}, {value, _Value}}}] ->
       erlang:cancel_timer(TimeRef),
