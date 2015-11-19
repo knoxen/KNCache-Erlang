@@ -1,6 +1,6 @@
 {application, kncache,
- [{description, "Simple cache w/ TTL"}
- ,{vsn, "0.1.0"}
+ [{description, "Simple cache w/ TTL expiry"}
+ ,{vsn, "0.9.1"}
  ,{registered, []}
  ,{mod, {kncache_app, []}}
  ,{applications,

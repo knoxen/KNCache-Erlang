@@ -2,7 +2,7 @@
 
 -behavior(gen_server).
 
--vsn('1.0.0').
+-vsn('0.9.1').
 
 -define(CACHE_SRV, kncache_srv).
 
