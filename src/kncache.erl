@@ -65,5 +65,5 @@ get(Key, ValueFn, Cache) ->
 flush(Cache) ->
   gen_server:call(?CACHE_SRV, {flush, Cache}).
 
-delete(Cache, Key) ->
+delete(Key, Cache) ->
   gen_server:cast(?CACHE_SRV, {delete, Key, Cache}).
