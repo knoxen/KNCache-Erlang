@@ -181,7 +181,7 @@ handle_cast(_Msg, Caches) ->
 handle_info({delete, Key, Cache}, Caches) ->
   case maps:is_key(Cache, Caches) of
     true ->
-      ets:delete(Key, cache_name(Cache));
+      ets:delete(cache_name(Cache), Key);
     false ->
       skip
   end,
@@ -229,8 +229,8 @@ cache_put(Key, Value, Cache, infinity) ->
   ok;
 cache_put(Key, Value, Cache, Retain) ->
   TimeRef = erlang:send_after(Retain*1000, ?CACHE_SRV, {delete, Key, Cache}),
-  ets:insert(cache_name(Cache),
-             {Key, {{time_ref, TimeRef}, {value, Value}}}),
+  TimedValue = {{time_ref, TimeRef}, {value, Value}},
+  ets:insert(cache_name(Cache), {Key, TimedValue}),
   ok.
 
 cache_delete(Key, Cache) ->
