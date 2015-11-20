@@ -10,6 +10,7 @@
         ,list/0
         ,info/1
         ,info/2
+        ,size/1
         ,retain_secs/1
         ,retain_secs/2
         ,first/1
@@ -51,6 +52,9 @@ info(Cache) ->
 
 info(Key, Cache) ->
   gen_server:call(?CACHE_SRV, {info, Key, Cache}).
+
+size(Cache) ->
+  gen_server:call(?CACHE_SRV, {size, Cache}).
 
 put(Key, Value, Cache) ->
   gen_server:call(?CACHE_SRV, {put, Key, Value, Cache}).

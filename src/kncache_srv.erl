@@ -78,6 +78,14 @@ handle_call({info, Key, Cache}, _From, Caches) ->
             {reply, {expiry, Expiry}, Caches}
         end);
             
+handle_call({size, Cache}, _From, Caches) ->
+  reply(Cache, Caches, 
+        fun() ->
+            CacheName = cache_name(Cache),
+            Size = ets:info(CacheName, size),
+            {reply, Size, Caches}
+        end);
+
 handle_call({retain, Cache}, _From, Caches) ->
   reply(Cache, Caches, 
         fun() ->
