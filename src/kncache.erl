@@ -15,8 +15,10 @@
         ,retain_secs/2
         ,first/1
         ,put/3
+        ,put/4
         ,get/2
         ,get/3
+        ,remove/2
         ,delete/2
         ,flush/1
         ]).
@@ -59,11 +61,17 @@ size(Cache) ->
 put(Key, Value, Cache) ->
   gen_server:call(?CACHE_SRV, {put, Key, Value, Cache}).
 
+put(Key, Value, Retain, Cache) ->
+  gen_server:call(?CACHE_SRV, {put, Key, Value, Retain, Cache}).
+
 get(Key, Cache) ->
   gen_server:call(?CACHE_SRV, {get, Key, Cache}).
 
 get(Key, ValueFn, Cache) ->
   gen_server:call(?CACHE_SRV, {get, Key, ValueFn, Cache}).
+
+remove(Key, Cache) ->
+  gen_server:call(?CACHE_SRV, {remove, Key, Cache}).
 
 %% Flush contents of cache
 flush(Cache) ->
@@ -71,3 +79,5 @@ flush(Cache) ->
 
 delete(Key, Cache) ->
   gen_server:cast(?CACHE_SRV, {delete, Key, Cache}).
+
+

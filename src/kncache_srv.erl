@@ -2,7 +2,7 @@
 
 -behavior(gen_server).
 
--vsn('0.9.1').
+-vsn('0.9.2').
 
 -define(CACHE_SRV, kncache_srv).
 
@@ -60,22 +60,22 @@ handle_call({info, Cache}, _From, Caches) ->
 handle_call({info, Key, Cache}, _From, Caches) ->
   reply(Cache, Caches,
         fun() ->
-            Expiry =
+            Info =
               case ets:lookup(cache_name(Cache), Key) of
-                [{Key, {{time_ref, TimeRef}, {value, _Val}}}] ->
+                [{Key, {{time_ref, TimeRef}, {retain, Retain}, {value, _Val}}}] ->
                   case erlang:read_timer(TimeRef) of
                     false ->
-                      expired;
+                      {exiry, expired};
                     TimeLeft ->
-                      TimeLeft / 1000
+                      {{expiry, TimeLeft / 1000}, {retain, Retain}}
                   end;
                 %% Infinite cached value
                 [{Key, _Val}] ->
-                  infinity;
+                  {expiry, infinity};
                 [] ->
                   undefined
               end,
-            {reply, {expiry, Expiry}, Caches}
+            {reply, Info, Caches}
         end);
             
 handle_call({size, Cache}, _From, Caches) ->
@@ -104,7 +104,19 @@ handle_call({put, Key, Value, Cache}, _From, Caches) ->
         fun() ->
             case maps:is_key(Cache, Caches) of
               true ->
-                cache_put(Key, Value, Cache, retain(Cache, Caches)),
+                cache_put(Key, Value, retain(Cache, Caches), Cache),
+                {reply, ok, Caches};
+              false ->
+                {reply, skip, Caches}
+            end
+        end);
+
+handle_call({put, Key, Value, Retain, Cache}, _From, Caches) ->
+  reply(Cache, Caches,
+        fun() ->
+            case maps:is_key(Cache, Caches) of
+              true ->
+                cache_put(Key, Value, Retain, Cache),
                 {reply, ok, Caches};
               false ->
                 {reply, skip, Caches}
@@ -121,11 +133,11 @@ handle_call({get, Key, ValueFn, Cache}, _From, Caches) ->
             Value =
               case ets:lookup(cache_name(Cache), Key) of
                 %% Cached value scheduled for deletion
-                [{Key, {{time_ref, TimeRef}, {value, Val}}}] ->
+                [{Key, {{time_ref, TimeRef}, {retain, Retain}, {value, Val}}}] ->
                   %% Cancel the current timer
                   erlang:cancel_timer(TimeRef),
                   %% Put the value back in the cache to start a new timer
-                  cache_put(Key, Val, Cache, retain(Cache, Caches)),
+                  cache_put(Key, Val, Retain, Cache),
                   {ok, Val};
                 %% Infinite cached value
                 [{Key, Val}] ->
@@ -138,9 +150,22 @@ handle_call({get, Key, ValueFn, Cache}, _From, Caches) ->
                       undefined;
                     NewValue ->
                       %% Cache and return newly created value
-                      cache_put(Key, NewValue, Cache, retain(Cache, Caches)),
+                      cache_put(Key, NewValue, retain(Cache, Caches), Cache),
                       {ok, NewValue}
                   end
+              end,
+            {reply, Value, Caches}
+        end);
+
+handle_call({remove, Key, Cache}, _From, Caches) ->
+  reply(Cache, Caches,
+        fun() ->
+            Value = 
+              case maps:is_key(Cache, Caches) of
+                true ->
+                  cache_delete(Key, Cache);
+                false ->
+                  {error, invalid_cache}
               end,
             {reply, Value, Caches}
         end);
@@ -232,25 +257,25 @@ retain(Cache, Caches) ->
       Retain
   end.
 
-cache_put(Key, Value, Cache, infinity) ->
+cache_put(Key, Value, infinity, Cache) ->
   ets:insert(cache_name(Cache), {Key, Value}),
   ok;
-cache_put(Key, Value, Cache, Retain) ->
+cache_put(Key, Value, Retain, Cache) ->
   TimeRef = erlang:send_after(Retain*1000, ?CACHE_SRV, {delete, Key, Cache}),
-  TimedValue = {{time_ref, TimeRef}, {value, Value}},
+  TimedValue = {{time_ref, TimeRef}, {retain, Retain}, {value, Value}},
   ets:insert(cache_name(Cache), {Key, TimedValue}),
   ok.
 
 cache_delete(Key, Cache) ->
   CacheName = cache_name(Cache),
   case ets:lookup(CacheName, Key) of
-    [{Key, {{time_ref, TimeRef}, {value, _Value}}}] ->
+    [{Key, {{time_ref, TimeRef}, {retain, _Retain}, {value, Value}}}] ->
       erlang:cancel_timer(TimeRef),
       ets:delete(CacheName, Key),
-      ok;
-    [{Key, _Value}] ->
+      {ok, Value};
+    [{Key, Value}] ->
       ets:delete(CacheName, Key),
-      ok;
+      {ok, Value};
     _ ->
       no_match
   end.
