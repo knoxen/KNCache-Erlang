@@ -49,9 +49,9 @@ handle_call(list, _From, Caches) ->
 handle_call({info, Cache}, _From, Caches) ->
   reply(Cache, Caches, 
         fun() ->
-            CacheName = cache_name(Cache),
-            Size = ets:info(CacheName, size),
-            Memory = ets:info(CacheName, memory) * erlang:system_info(wordsize),
+            TableName = table_name(Cache),
+            Size = ets:info(TableName, size),
+            Memory = ets:info(TableName, memory) * erlang:system_info(wordsize),
             Kbs = erlang:trunc(Memory / 100) / 10,
             TTL = ttl(Cache, Caches),
             {reply, [{size, Size}, {kbs, Kbs}, {ttl, TTL}], Caches}
@@ -61,7 +61,7 @@ handle_call({info, Key, Cache}, _From, Caches) ->
   reply(Cache, Caches,
         fun() ->
             Info =
-              case ets:lookup(cache_name(Cache), Key) of
+              case ets:lookup(table_name(Cache), Key) of
                 [{Key, {{time_ref, TimeRef}, {ttl, TTL}, {value, _Val}}}] ->
                   case erlang:read_timer(TimeRef) of
                     false ->
@@ -81,8 +81,8 @@ handle_call({info, Key, Cache}, _From, Caches) ->
 handle_call({size, Cache}, _From, Caches) ->
   reply(Cache, Caches, 
         fun() ->
-            CacheName = cache_name(Cache),
-            Size = ets:info(CacheName, size),
+            TableName = table_name(Cache),
+            Size = ets:info(TableName, size),
             {reply, Size, Caches}
         end);
 
@@ -131,7 +131,7 @@ handle_call({get, Key, ValueFn, Cache}, _From, Caches) ->
   reply(Cache, Caches,
         fun() ->
             Value =
-              case ets:lookup(cache_name(Cache), Key) of
+              case ets:lookup(table_name(Cache), Key) of
                 %% Cached value scheduled for deletion
                 [{Key, {{time_ref, TimeRef}, {ttl, TTL}, {value, Val}}}] ->
                   %% Cancel the current timer
@@ -177,12 +177,12 @@ handle_call({delete, Key, Cache}, _From, Caches) ->
 handle_call({first, Cache}, _From, Caches) ->
   reply(Cache, Caches,
         fun() ->
-            CacheName = cache_name(Cache),
-            First = case ets:first(CacheName) of
+            TableName = table_name(Cache),
+            First = case ets:first(TableName) of
                       '$end_of_table' ->
                         empty;
                       Key ->
-                        ets:lookup(CacheName, Key)
+                        ets:lookup(TableName, Key)
                     end,
             {reply, First, Caches}
         end);
@@ -190,7 +190,7 @@ handle_call({first, Cache}, _From, Caches) ->
 handle_call({flush, Cache}, _From, Caches) ->
   reply(Cache, Caches, 
         fun() ->
-            ets:delete_all_objects(cache_name(Cache)),
+            ets:delete_all_objects(table_name(Cache)),
             {reply, ok, Caches}
         end);
 
@@ -203,12 +203,11 @@ handle_call(Req, _From, Caches) ->
 handle_cast({destroy, Cache}, Caches) ->
   case maps:is_key(Cache, Caches) of
     true ->
-      ets:delete(Cache);
+      ets:delete(table_name(Cache)),
+      {noreply, maps:remove(Cache, Caches)};
     false ->
-      skip
-  end,
-  {noreply, Caches};
-
+      {noreply, Caches}
+  end;
 handle_cast({destroy, Key, Cache}, Caches) ->
   case maps:is_key(Cache, Caches) of
     true ->
@@ -227,7 +226,7 @@ handle_cast(_Msg, Caches) ->
 handle_info({destroy, Key, Cache}, Caches) ->
   case maps:is_key(Cache, Caches) of
     true ->
-      ets:delete(cache_name(Cache), Key);
+      ets:delete(table_name(Cache), Key);
     false ->
       skip
   end,
@@ -254,12 +253,12 @@ update_caches(Cache, TTL, Caches) ->
     true ->
       maps:update(Cache, TTL, Caches);
     false ->
-      CacheName = cache_name(Cache),
-      ets:new(CacheName, [named_table, public]),
+      TableName = table_name(Cache),
+      ets:new(TableName, [named_table, public]),
       maps:put(Cache, TTL, Caches)
   end.
 
-cache_name(Cache) ->
+table_name(Cache) ->
   list_to_atom("kncache_" ++ atom_to_list(Cache)).
 
 ttl(Cache, Caches) ->
@@ -271,26 +270,26 @@ ttl(Cache, Caches) ->
   end.
 
 cache_put(Key, Value, infinity, Cache) ->
-  ets:insert(cache_name(Cache), {Key, Value}),
+  ets:insert(table_name(Cache), {Key, Value}),
   ok;
 cache_put(Key, Value, TTL, Cache) ->
   TimeRef = erlang:send_after(TTL*1000, ?CACHE_SRV, {destroy, Key, Cache}),
   TimedValue = {{time_ref, TimeRef}, {ttl, TTL}, {value, Value}},
-  ets:insert(cache_name(Cache), {Key, TimedValue}),
+  ets:insert(table_name(Cache), {Key, TimedValue}),
   ok.
 
 cache_delete(Key, Cache, Force) ->
-  CacheName = cache_name(Cache),
-  case ets:lookup(CacheName, Key) of
+  TableName = table_name(Cache),
+  case ets:lookup(TableName, Key) of
     [{Key, {{time_ref, TimeRef}, {ttl, _TTL}, {value, Value}}}] ->
       erlang:cancel_timer(TimeRef),
-      ets:delete(CacheName, Key),
+      ets:delete(TableName, Key),
       {ok, Value};
     [{Key, Value}] ->
       %% Infinite TTL; only delete if force is true
       case Force of 
         true ->
-          ets:delete(CacheName, Key);
+          ets:delete(TableName, Key);
         false ->
           skip
       end,
