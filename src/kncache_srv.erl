@@ -278,7 +278,7 @@ cache_delete(Key, Cache, Force) ->
       case Force of 
         true ->
           ets:delete(CacheName, Key);
-        fale ->
+        false ->
           skip
       end,
       {ok, Value};
