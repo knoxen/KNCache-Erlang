@@ -11,16 +11,17 @@
         ,info/1
         ,info/2
         ,size/1
-        ,retain_secs/1
-        ,retain_secs/2
+        ,ttl/1
+        ,ttl/2
         ,first/1
         ,put/3
         ,put/4
         ,get/2
         ,get/3
         ,delete/2
-        ,destroy/2
         ,flush/1
+        ,destroy/1
+        ,destroy/2
         ]).
 
 %%
@@ -30,20 +31,20 @@
 make(Caches) ->
   gen_server:call(?CACHE_SRV, {make, Caches}).
 
-make(Cache, Retain) ->
-  gen_server:call(?CACHE_SRV, {make, Cache, Retain}).
+make(Cache, TTL) ->
+  gen_server:call(?CACHE_SRV, {make, Cache, TTL}).
 
-%% List of {Cache, Retain} terms
+%% List of {Cache, TTL} terms
 list() ->
   gen_server:call(?CACHE_SRV, list).
 
-%% The number of seconds a cache's values are retained
-retain_secs(Cache) ->
-  gen_server:call(?CACHE_SRV, {retain, Cache}).
+%% Cache TTL (in seconds)
+ttl(Cache) ->
+  gen_server:call(?CACHE_SRV, {ttl, Cache}).
 
-%% Set the number of seconds a cache's values are retained
-retain_secs(Cache, Retain) ->
-  gen_server:call(?CACHE_SRV, {retain, Cache, Retain}).
+%% Set cache TTL (in seconds)
+ttl(Cache, TTL) ->
+  gen_server:call(?CACHE_SRV, {ttl, Cache, TTL}).
 
 first(Cache) ->
   gen_server:call(?CACHE_SRV, {first, Cache}).
@@ -61,8 +62,8 @@ size(Cache) ->
 put(Key, Value, Cache) ->
   gen_server:call(?CACHE_SRV, {put, Key, Value, Cache}).
 
-put(Key, Value, Retain, Cache) ->
-  gen_server:call(?CACHE_SRV, {put, Key, Value, Retain, Cache}).
+put(Key, Value, TTL, Cache) ->
+  gen_server:call(?CACHE_SRV, {put, Key, Value, TTL, Cache}).
 
 get(Key, Cache) ->
   gen_server:call(?CACHE_SRV, {get, Key, Cache}).
@@ -73,12 +74,15 @@ get(Key, ValueFn, Cache) ->
 delete(Key, Cache) ->
   gen_server:call(?CACHE_SRV, {delete, Key, Cache}).
 
+flush(Cache) ->
+  gen_server:call(?CACHE_SRV, {flush, Cache}).
+
+destroy(Cache) ->
+  gen_server:cast(?CACHE_SRV, {destroy, Cache}).
+
 destroy(Key, Cache) ->
   gen_server:cast(?CACHE_SRV, {destroy, Key, Cache}).
 
-%% Flush contents of cache
-flush(Cache) ->
-  gen_server:call(?CACHE_SRV, {flush, Cache}).
 
 
 
