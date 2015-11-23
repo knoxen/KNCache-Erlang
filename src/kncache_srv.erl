@@ -157,7 +157,7 @@ handle_call({get, Key, ValueFn, Cache}, _From, Caches) ->
             {reply, Value, Caches}
         end);
 
-handle_call({remove, Key, Cache}, _From, Caches) ->
+handle_call({delete, Key, Cache}, _From, Caches) ->
   reply(Cache, Caches,
         fun() ->
             Value = 
@@ -211,7 +211,7 @@ handle_cast(_Msg, Caches) ->
 %%
 %% Handle info
 %%
-handle_info({delete, Key, Cache}, Caches) ->
+handle_info({destroy, Key, Cache}, Caches) ->
   case maps:is_key(Cache, Caches) of
     true ->
       ets:delete(cache_name(Cache), Key);
@@ -274,7 +274,7 @@ cache_delete(Key, Cache) ->
       ets:delete(CacheName, Key),
       {ok, Value};
     [{Key, Value}] ->
-      ets:delete(CacheName, Key),
+      %% Infinite TTL, so don't delete
       {ok, Value};
     _ ->
       no_match

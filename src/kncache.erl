@@ -18,8 +18,8 @@
         ,put/4
         ,get/2
         ,get/3
-        ,remove/2
         ,delete/2
+        ,destroy/2
         ,flush/1
         ]).
 
@@ -70,14 +70,15 @@ get(Key, Cache) ->
 get(Key, ValueFn, Cache) ->
   gen_server:call(?CACHE_SRV, {get, Key, ValueFn, Cache}).
 
-remove(Key, Cache) ->
-  gen_server:call(?CACHE_SRV, {remove, Key, Cache}).
+delete(Key, Cache) ->
+  gen_server:call(?CACHE_SRV, {delete, Key, Cache}).
+
+destroy(Key, Cache) ->
+  gen_server:cast(?CACHE_SRV, {destroy, Key, Cache}).
 
 %% Flush contents of cache
 flush(Cache) ->
   gen_server:call(?CACHE_SRV, {flush, Cache}).
 
-delete(Key, Cache) ->
-  gen_server:cast(?CACHE_SRV, {delete, Key, Cache}).
 
 
