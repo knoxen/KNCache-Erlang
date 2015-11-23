@@ -163,7 +163,7 @@ handle_call({delete, Key, Cache}, _From, Caches) ->
             Value = 
               case maps:is_key(Cache, Caches) of
                 true ->
-                  cache_delete(Key, Cache);
+                  cache_delete(Key, Cache, false);
                 false ->
                   {error, invalid_cache}
               end,
@@ -196,10 +196,10 @@ handle_call(Req, _From, Caches) ->
 %%
 %% Handle casts
 %%
-handle_cast({delete, Key, Cache}, Caches) ->
+handle_cast({destroy, Key, Cache}, Caches) ->
   case maps:is_key(Cache, Caches) of
     true ->
-      cache_delete(Key, Cache);
+      cache_delete(Key, Cache, true);
     false ->
       skip
   end,
@@ -261,12 +261,12 @@ cache_put(Key, Value, infinity, Cache) ->
   ets:insert(cache_name(Cache), {Key, Value}),
   ok;
 cache_put(Key, Value, Retain, Cache) ->
-  TimeRef = erlang:send_after(Retain*1000, ?CACHE_SRV, {delete, Key, Cache}),
+  TimeRef = erlang:send_after(Retain*1000, ?CACHE_SRV, {destroy, Key, Cache}),
   TimedValue = {{time_ref, TimeRef}, {retain, Retain}, {value, Value}},
   ets:insert(cache_name(Cache), {Key, TimedValue}),
   ok.
 
-cache_delete(Key, Cache) ->
+cache_delete(Key, Cache, Force) ->
   CacheName = cache_name(Cache),
   case ets:lookup(CacheName, Key) of
     [{Key, {{time_ref, TimeRef}, {retain, _Retain}, {value, Value}}}] ->
@@ -274,7 +274,13 @@ cache_delete(Key, Cache) ->
       ets:delete(CacheName, Key),
       {ok, Value};
     [{Key, Value}] ->
-      %% Infinite TTL, so don't delete
+      %% Infinite TTL; only delete if force is true
+      case Force of 
+        true ->
+          ets:delete(CacheName, Key);
+        fale ->
+          skip
+      end,
       {ok, Value};
     _ ->
       no_match
