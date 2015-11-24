@@ -2,7 +2,7 @@
 
 -behavior(gen_server).
 
--vsn('0.9.3').
+-vsn('0.9.4').
 
 -define(CACHE_SRV, kncache_srv).
 
@@ -98,22 +98,6 @@ handle_call({ttl, Cache, TTL}, _From, Caches) ->
             Caches2 = maps:put(Cache, TTL, Caches),
             {reply, ok, Caches2}
         end);
-
-%% handle_call({put, Key, Value, Cache}, From, Caches) ->
-%%   TTL = ttl(Cache, Caches),
-%%   handle_call({put, Key, Value, TTL, Cache}, From, Caches);
-
-%% handle_call({put, Key, Value, TTL, Cache}, _From, Caches) ->
-%%   reply(Cache, Caches,
-%%         fun() ->
-%%             case maps:is_key(Cache, Caches) of
-%%               true ->
-%%                 cache_put(Key, Value, TTL, Cache),
-%%                 {reply, ok, Caches};
-%%               false ->
-%%                 {reply, skip, Caches}
-%%             end
-%%         end);
 
 handle_call({get, Key, Cache}, From, Caches) ->
   ValueFn = fun() -> undefined end,
