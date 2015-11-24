@@ -99,17 +99,9 @@ handle_call({ttl, Cache, TTL}, _From, Caches) ->
             {reply, ok, Caches2}
         end);
 
-handle_call({put, Key, Value, Cache}, _From, Caches) ->
-  reply(Cache, Caches,
-        fun() ->
-            case maps:is_key(Cache, Caches) of
-              true ->
-                cache_put(Key, Value, ttl(Cache, Caches), Cache),
-                {reply, ok, Caches};
-              false ->
-                {reply, skip, Caches}
-            end
-        end);
+handle_call({put, Key, Value, Cache}, From, Caches) ->
+  TTL = ttl(Cache, Caches),
+  handle_call({put, Key, Value, TTL, Cache}, From, Caches);
 
 handle_call({put, Key, Value, TTL, Cache}, _From, Caches) ->
   reply(Cache, Caches,
@@ -187,6 +179,13 @@ handle_call({first, Cache}, _From, Caches) ->
             {reply, First, Caches}
         end);
 
+handle_call({keys, Cache}, From, Caches) ->
+  reply(Cache, Caches,
+        fun() ->
+            KeysFun = fun(K,_V) -> K end,
+            handle_call({map, KeysFun, Cache}, From, Caches)
+        end);
+
 handle_call({flush, Cache}, _From, Caches) ->
   reply(Cache, Caches, 
         fun() ->
@@ -230,6 +229,7 @@ handle_cast({destroy, Cache}, Caches) ->
     false ->
       {noreply, Caches}
   end;
+
 handle_cast({destroy, Key, Cache}, Caches) ->
   case maps:is_key(Cache, Caches) of
     true ->

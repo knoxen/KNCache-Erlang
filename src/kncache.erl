@@ -14,6 +14,7 @@
         ,ttl/1
         ,ttl/2
         ,first/1
+        ,keys/1
         ,put/3
         ,put/4
         ,get/2
@@ -50,6 +51,9 @@ ttl(Cache, TTL) ->
 
 first(Cache) ->
   gen_server:call(?CACHE_SRV, {first, Cache}).
+
+keys(Cache) ->
+  gen_server:call(?CACHE_SRV, {keys, Cache}).
 
 %% 
 info(Cache) ->
