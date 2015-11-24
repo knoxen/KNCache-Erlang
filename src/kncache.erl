@@ -66,10 +66,10 @@ size(Cache) ->
   gen_server:call(?CACHE_SRV, {size, Cache}).
 
 put(Key, Value, Cache) ->
-  gen_server:call(?CACHE_SRV, {put, Key, Value, Cache}).
+  gen_server:cast(?CACHE_SRV, {put, Key, Value, Cache}).
 
 put(Key, Value, TTL, Cache) ->
-  gen_server:call(?CACHE_SRV, {put, Key, Value, TTL, Cache}).
+  gen_server:cast(?CACHE_SRV, {put, Key, Value, TTL, Cache}).
 
 get(Key, Cache) ->
   gen_server:call(?CACHE_SRV, {get, Key, Cache}).

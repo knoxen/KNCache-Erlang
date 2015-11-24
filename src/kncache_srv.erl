@@ -99,21 +99,21 @@ handle_call({ttl, Cache, TTL}, _From, Caches) ->
             {reply, ok, Caches2}
         end);
 
-handle_call({put, Key, Value, Cache}, From, Caches) ->
-  TTL = ttl(Cache, Caches),
-  handle_call({put, Key, Value, TTL, Cache}, From, Caches);
+%% handle_call({put, Key, Value, Cache}, From, Caches) ->
+%%   TTL = ttl(Cache, Caches),
+%%   handle_call({put, Key, Value, TTL, Cache}, From, Caches);
 
-handle_call({put, Key, Value, TTL, Cache}, _From, Caches) ->
-  reply(Cache, Caches,
-        fun() ->
-            case maps:is_key(Cache, Caches) of
-              true ->
-                cache_put(Key, Value, TTL, Cache),
-                {reply, ok, Caches};
-              false ->
-                {reply, skip, Caches}
-            end
-        end);
+%% handle_call({put, Key, Value, TTL, Cache}, _From, Caches) ->
+%%   reply(Cache, Caches,
+%%         fun() ->
+%%             case maps:is_key(Cache, Caches) of
+%%               true ->
+%%                 cache_put(Key, Value, TTL, Cache),
+%%                 {reply, ok, Caches};
+%%               false ->
+%%                 {reply, skip, Caches}
+%%             end
+%%         end);
 
 handle_call({get, Key, Cache}, From, Caches) ->
   ValueFn = fun() -> undefined end,
@@ -213,6 +213,19 @@ handle_call(Req, _From, Caches) ->
 %%
 %% Handle casts
 %%
+handle_cast({put, Key, Value, Cache}, Caches) ->
+  TTL = ttl(Cache, Caches),
+  handle_cast({put, Key, Value, TTL, Cache}, Caches);
+
+handle_cast({put, Key, Value, TTL, Cache}, Caches) ->
+  case maps:is_key(Cache, Caches) of
+    true ->
+      cache_put(Key, Value, TTL, Cache),
+      {noreply, Caches};
+    false ->
+      {noreply, Caches}
+  end;
+
 handle_cast({foreach, KVFun, Cache}, Caches) ->
   cache_foreach(KVFun, Cache),
   {noreply, Caches};
