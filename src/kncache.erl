@@ -22,6 +22,8 @@
         ,flush/1
         ,destroy/1
         ,destroy/2
+        ,foreach/2
+        ,map/2
         ]).
 
 %%
@@ -82,6 +84,12 @@ destroy(Cache) ->
 
 destroy(Key, Cache) ->
   gen_server:cast(?CACHE_SRV, {destroy, Key, Cache}).
+
+foreach(KVFun, Cache) ->
+  gen_server:call(?CACHE_SRV, {foreach, KVFun, Cache}).
+
+map(KVFun, Cache) ->
+  gen_server:call(?CACHE_SRV, {map, KVFun, Cache}).
 
 
 

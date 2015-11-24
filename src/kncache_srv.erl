@@ -2,7 +2,7 @@
 
 -behavior(gen_server).
 
--vsn('0.9.2').
+-vsn('0.9.3').
 
 -define(CACHE_SRV, kncache_srv).
 
@@ -192,6 +192,28 @@ handle_call({flush, Cache}, _From, Caches) ->
         fun() ->
             ets:delete_all_objects(table_name(Cache)),
             {reply, ok, Caches}
+        end);
+
+handle_call({foreach, Fn, Cache}, _From, Caches) ->
+  reply(Cache, Caches, 
+        fun() ->
+            KVFun = 
+              fun({K,V}, _Acc) ->
+                  Fn(K,V)
+              end,
+            _Acc = ets:foldl(KVFun, [], table_name(Cache)),
+            {reply, ok, Caches}
+        end);
+
+handle_call({map, Fn, Cache}, _From, Caches) ->
+  reply(Cache, Caches, 
+        fun() ->
+            KVFun = 
+              fun({K,V}, List) ->
+                  [Fn(K,V)] ++ List
+              end,
+            List = ets:foldl(KVFun, [], table_name(Cache)),
+            {reply, List, Caches}
         end);
 
 handle_call(Req, _From, Caches) ->
