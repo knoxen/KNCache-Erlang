@@ -193,26 +193,18 @@ handle_call({flush, Cache}, _From, Caches) ->
             {reply, ok, Caches}
         end);
 
-handle_call({foreach, Fn, Cache}, _From, Caches) ->
-  reply(Cache, Caches, 
-        fun() ->
-            KVFun = 
-              fun({K,V}, _Acc) ->
-                  Fn(K,V)
-              end,
-            _Acc = ets:foldl(KVFun, [], table_name(Cache)),
-            {reply, ok, Caches}
-        end);
+%% handle_call({foreach, KVFun, Cache}, _From, Caches) ->
+%%   reply(Cache, Caches, 
+%%         fun() ->
+%%             cache_foreach(KVFun, Cache),
+%%             {reply, ok, Caches}
+%%         end);
 
-handle_call({map, Fn, Cache}, _From, Caches) ->
+handle_call({map, KVFun, Cache}, _From, Caches) ->
   reply(Cache, Caches, 
         fun() ->
-            KVFun = 
-              fun({K,V}, List) ->
-                  [Fn(K,V)] ++ List
-              end,
-            List = ets:foldl(KVFun, [], table_name(Cache)),
-            {reply, List, Caches}
+            Result = cache_map(KVFun, Cache),
+            {reply, Result, Caches}
         end);
 
 handle_call(Req, _From, Caches) ->
@@ -221,6 +213,10 @@ handle_call(Req, _From, Caches) ->
 %%
 %% Handle casts
 %%
+handle_cast({foreach, KVFun, Cache}, Caches) ->
+  cache_foreach(KVFun, Cache),
+  {noreply, Caches};
+
 handle_cast({destroy, Cache}, Caches) ->
   case maps:is_key(Cache, Caches) of
     true ->
@@ -319,6 +315,21 @@ cache_delete(Key, Cache, Force) ->
     _ ->
       no_match
   end.
+
+cache_foreach(KVFun, Cache) ->
+  ForeachFun = 
+    fun({K,V}, _Acc) ->
+        KVFun(K,V)
+    end,
+  ets:foldl(ForeachFun, no_acc, table_name(Cache)).
+
+cache_map(KVFun, Cache) ->
+  MapFun = 
+    fun({K,V}, Acc) ->
+        [KVFun(K,V)] ++ Acc
+    end,
+  ets:foldl(MapFun, [], table_name(Cache)).
+  
 
 reply(Cache, Caches, ValidCacheFn) ->
   case maps:is_key(Cache, Caches) of
