@@ -32,10 +32,10 @@
 %%
 
 make(Caches) ->
-  gen_server:call(?CACHE_SRV, {make, Caches}).
+  gen_server:cast(?CACHE_SRV, {make, Caches}).
 
 make(Cache, TTL) ->
-  gen_server:call(?CACHE_SRV, {make, Cache, TTL}).
+  gen_server:cast(?CACHE_SRV, {make, Cache, TTL}).
 
 %% List of {Cache, TTL} terms
 list() ->

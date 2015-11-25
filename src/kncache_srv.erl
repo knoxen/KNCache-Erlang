@@ -31,23 +31,11 @@ init([]) ->
 %%
 %% Handle calls
 %%
-handle_call({make, Cache, TTL}, _From, Caches) ->
-  {reply, ok, update_caches(Cache, TTL, Caches)};
-
-handle_call({make, CacheList}, _From, Caches) ->
-  NewCaches = lists:foldl(
-                fun({Cache, TTL}, Acc) ->
-                    update_caches(Cache, TTL, Acc)
-                end,
-                Caches,
-                CacheList),
-  {reply, ok, NewCaches};
-
 handle_call(list, _From, Caches) ->
   {reply, maps:keys(Caches), Caches};
 
 handle_call({info, Cache}, _From, Caches) ->
-  reply_fun(
+  call_reply(
     fun() ->
         TableName = table_name(Cache),
         Size = ets:info(TableName, size),
@@ -59,7 +47,7 @@ handle_call({info, Cache}, _From, Caches) ->
     Cache, Caches);
 
 handle_call({info, Key, Cache}, _From, Caches) ->
-  reply_fun(
+  call_reply(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
           [{Key, {{time_ref, TimeRef}, {ttl, TTL}, {value, _Val}}}] ->
@@ -79,15 +67,14 @@ handle_call({info, Key, Cache}, _From, Caches) ->
     Cache, Caches);
 
 handle_call({size, Cache}, _From, Caches) ->
-  reply_fun(
+  call_reply(
     fun() ->
-        TableName = table_name(Cache),
-        ets:info(TableName, size)
+        ets:info(table_name(Cache), size)
     end,
     Cache, Caches);
 
 handle_call({ttl, Cache}, _From, Caches) ->
-  reply_fun(
+  call_reply(
     fun() ->
         ttl(Cache, Caches)
     end,
@@ -98,7 +85,7 @@ handle_call({get, Key, Cache}, From, Caches) ->
   handle_call({get, Key, ValueFn, Cache}, From, Caches);
 
 handle_call({get, Key, ValueFn, Cache}, _From, Caches) ->
-  reply_fun(
+  call_reply(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
           %% Cached value scheduled for deletion
@@ -131,14 +118,14 @@ handle_call({get, Key, ValueFn, Cache}, _From, Caches) ->
     Cache, Caches);
 
 handle_call({delete, Key, Cache}, _From, Caches) ->
-  reply_fun(
+  call_reply(
     fun() ->
         cache_delete(Key, Cache, false)
     end,
     Cache, Caches);
 
 handle_call({first, Cache}, _From, Caches) ->
-  reply_fun(
+  call_reply(
     fun() ->
         TableName = table_name(Cache),
         case ets:first(TableName) of
@@ -155,14 +142,14 @@ handle_call({keys, Cache}, From, Caches) ->
   handle_call({map, MapFun, Cache}, From, Caches);
 
 handle_call({map, MapFun, Cache}, _From, Caches) ->
-  reply_fun(
+  call_reply(
     fun() ->
         cache_map(MapFun, Cache)
     end,
     Cache, Caches);
 
 handle_call({filter, PredFun, Cache}, _From, Caches) ->
-  reply_fun(
+  call_reply(
     fun() ->
         cache_filter(PredFun, Cache)
     end,
@@ -174,25 +161,41 @@ handle_call(Req, _From, Caches) ->
 %%
 %% Handle casts
 %%
+handle_cast({make, Cache, TTL}, Caches) ->
+  {noreply, update_caches(Cache, TTL, Caches)};
+
+handle_cast({make, CacheList}, Caches) ->
+  NewCaches = 
+    lists:foldl(
+      fun({Cache, TTL}, Acc) ->
+          update_caches(Cache, TTL, Acc)
+      end,
+      Caches, CacheList),
+  {noreply, NewCaches};
+
 handle_cast({ttl, Cache, TTL}, Caches) ->
   {noreply, maps:put(Cache, TTL, Caches)};
 
 handle_cast({put, Key, Value, Cache}, Caches) ->
-  TTL = ttl(Cache, Caches),
-  handle_cast({put, Key, Value, TTL, Cache}, Caches);
+  cast_reply(
+    fun() ->
+        cache_put(Key, Value, ttl(Cache, Caches), Cache)
+    end,
+    Cache, Caches);
 
 handle_cast({put, Key, Value, TTL, Cache}, Caches) ->
-  case valid_cache(Cache, Caches) of
-    true ->
-      cache_put(Key, Value, TTL, Cache);
-    false ->
-      skip
-  end,
-  {noreply, Caches};
+  cast_reply(
+    fun() ->
+        cache_put(Key, Value, TTL, Cache)
+    end,
+    Cache, Caches);
 
 handle_cast({foreach, KVFun, Cache}, Caches) ->
-  cache_foreach(KVFun, Cache),
-  {noreply, Caches};
+  cast_reply(
+    fun() ->
+        cache_foreach(KVFun, Cache)
+    end,
+    Cache, Caches);
 
 handle_cast({destroy, Cache}, Caches) ->
   case valid_cache(Cache, Caches) of
@@ -204,22 +207,18 @@ handle_cast({destroy, Cache}, Caches) ->
   end;
 
 handle_cast({destroy, Key, Cache}, Caches) ->
-  case valid_cache(Cache, Caches) of
-    true ->
-      cache_delete(Key, Cache, true);
-    false ->
-      skip
-  end,
-  {noreply, Caches};
+  cast_reply(
+    fun() ->
+        cache_delete(Key, Cache, true)
+    end,
+    Cache, Caches);
 
 handle_cast({flush, Cache}, Caches) ->
-  case valid_cache(Cache, Caches) of
-    true ->
-      ets:delete_all_objects(table_name(Cache));
-    false ->
-      skip
-  end,
-  {noreply, Caches};
+  cast_reply(
+    fun() ->
+        ets:delete_all_objects(table_name(Cache))
+    end,
+    Cache, Caches);
 
 handle_cast(_Msg, Caches) ->
   {noreply, Caches}.
@@ -307,7 +306,7 @@ cache_foreach(KVFun, Cache) ->
     fun({K,V}, _Acc) ->
         KVFun(K,V)
     end,
-  ets:foldl(ForeachFun, no_acc, table_name(Cache)).
+  ets:foldl(ForeachFun, undefined, table_name(Cache)).
 
 cache_map(KVFun, Cache) ->
   MapFun = 
@@ -328,13 +327,22 @@ cache_filter(PredFun, Cache) ->
     end,
   ets:foldl(FilterFun, [], table_name(Cache)).
 
-reply_fun(ReplyFun, Cache, Caches) ->
+call_reply(Fun, Cache, Caches) ->
   case valid_cache(Cache, Caches) of
     true ->
-      {reply, ReplyFun(), Caches};
+      {reply, Fun(), Caches};
     false ->
       {reply, {invalid_cache, Cache}, Caches}
   end.
+
+cast_reply(Fun, Cache, Caches) ->
+  case valid_cache(Cache, Caches) of
+    true ->
+      Fun();
+    false ->
+      skip
+  end,
+  {noreply, Caches}.
 
 valid_cache(Cache, Caches) ->
   case ets:info(table_name(Cache)) of
