@@ -2,7 +2,7 @@
 
 -behavior(gen_server).
 
--vsn('0.9.4').
+-vsn('0.9.5').
 
 -define(CACHE_SRV, kncache_srv).
 
@@ -47,149 +47,130 @@ handle_call(list, _From, Caches) ->
   {reply, maps:keys(Caches), Caches};
 
 handle_call({info, Cache}, _From, Caches) ->
-  reply(Cache, Caches, 
-        fun() ->
-            TableName = table_name(Cache),
-            Size = ets:info(TableName, size),
-            Memory = ets:info(TableName, memory) * erlang:system_info(wordsize),
-            Kbs = erlang:trunc(Memory / 100) / 10,
-            TTL = ttl(Cache, Caches),
-            {reply, [{size, Size}, {kbs, Kbs}, {ttl, TTL}], Caches}
-        end);
+  reply_fun(
+    fun() ->
+        TableName = table_name(Cache),
+        Size = ets:info(TableName, size),
+        Memory = ets:info(TableName, memory) * erlang:system_info(wordsize),
+        Kbs = erlang:trunc(Memory / 100) / 10,
+        TTL = ttl(Cache, Caches),
+        [{size, Size}, {kbs, Kbs}, {ttl, TTL}]
+    end,
+    Cache, Caches);
 
 handle_call({info, Key, Cache}, _From, Caches) ->
-  reply(Cache, Caches,
-        fun() ->
-            Info =
-              case ets:lookup(table_name(Cache), Key) of
-                [{Key, {{time_ref, TimeRef}, {ttl, TTL}, {value, _Val}}}] ->
-                  case erlang:read_timer(TimeRef) of
-                    false ->
-                      {exiry, expired};
-                    TimeLeft ->
-                      {{expiry, TimeLeft / 1000}, {ttl, TTL}}
-                  end;
-                %% Infinite cached value
-                [{Key, _Val}] ->
-                  {expiry, infinity};
-                [] ->
-                  undefined
-              end,
-            {reply, Info, Caches}
-        end);
-            
+  reply_fun(
+    fun() ->
+        case ets:lookup(table_name(Cache), Key) of
+          [{Key, {{time_ref, TimeRef}, {ttl, TTL}, {value, _Val}}}] ->
+            case erlang:read_timer(TimeRef) of
+              false ->
+                {exiry, expired};
+              TimeLeft ->
+                {{expiry, TimeLeft / 1000}, {ttl, TTL}}
+            end;
+          %% Infinite cached value
+          [{Key, _Val}] ->
+            {expiry, infinity};
+          [] ->
+            undefined
+        end
+    end,
+    Cache, Caches);
+
 handle_call({size, Cache}, _From, Caches) ->
-  reply(Cache, Caches, 
-        fun() ->
-            TableName = table_name(Cache),
-            Size = ets:info(TableName, size),
-            {reply, Size, Caches}
-        end);
+  reply_fun(
+    fun() ->
+        TableName = table_name(Cache),
+        ets:info(TableName, size)
+    end,
+    Cache, Caches);
 
 handle_call({ttl, Cache}, _From, Caches) ->
-  reply(Cache, Caches, 
-        fun() ->
-            {reply, ttl(Cache, Caches), Caches}
-        end);
-
-handle_call({ttl, Cache, TTL}, _From, Caches) ->
-  reply(Cache, Caches, 
-        fun() ->
-            Caches2 = maps:put(Cache, TTL, Caches),
-            {reply, ok, Caches2}
-        end);
+  reply_fun(
+    fun() ->
+        ttl(Cache, Caches)
+    end,
+    Cache, Caches);
 
 handle_call({get, Key, Cache}, From, Caches) ->
   ValueFn = fun() -> undefined end,
   handle_call({get, Key, ValueFn, Cache}, From, Caches);
 
 handle_call({get, Key, ValueFn, Cache}, _From, Caches) ->
-  reply(Cache, Caches,
-        fun() ->
-            Value =
-              case ets:lookup(table_name(Cache), Key) of
-                %% Cached value scheduled for deletion
-                [{Key, {{time_ref, TimeRef}, {ttl, TTL}, {value, Val}}}] ->
-                  %% Cancel the current timer
-                  erlang:cancel_timer(TimeRef),
-                  %% Put the value back in the cache to start a new timer
-                  cache_put(Key, Val, TTL, Cache),
-                  {ok, Val};
-                %% Infinite cached value
-                [{Key, Val}] ->
-                  {ok, Val};
-                %% Generate, cache, and return a new value
-                [] ->
-                  %% Generate value and insert into cache unless undefined
-                  case ValueFn() of
-                    undefined ->
-                      undefined;
-                    {NewValue, TTL} ->
-                      %% Cache and return newly created value
-                      cache_put(Key, NewValue, TTL, Cache),
-                      {ok, NewValue};
-                    NewValue ->
-                      %% Cache and return newly created value
-                      cache_put(Key, NewValue, ttl(Cache, Caches), Cache),
-                      {ok, NewValue}
-                  end
-              end,
-            {reply, Value, Caches}
-        end);
+  reply_fun(
+    fun() ->
+        case ets:lookup(table_name(Cache), Key) of
+          %% Cached value scheduled for deletion
+          [{Key, {{time_ref, TimeRef}, {ttl, TTL}, {value, Value}}}] ->
+            %% Cancel the current timer
+            erlang:cancel_timer(TimeRef),
+            %% Put the value back in the cache to start a new timer
+            cache_put(Key, Value, TTL, Cache),
+            {ok, Value};
+          %% Infinite cached value
+          [{Key, Value}] ->
+            {ok, Value};
+          %% Generate, cache, and return a new value
+          [] ->
+            %% Generate value and insert into cache unless undefined
+            case ValueFn() of
+              undefined ->
+                undefined;
+              {NewValue, TTL} ->
+                %% Cache and return newly created value
+                cache_put(Key, NewValue, TTL, Cache),
+                {ok, NewValue};
+              NewValue ->
+                %% Cache and return newly created value
+                cache_put(Key, NewValue, ttl(Cache, Caches), Cache),
+                {ok, NewValue}
+            end
+        end
+    end,
+    Cache, Caches);
 
 handle_call({delete, Key, Cache}, _From, Caches) ->
-  reply(Cache, Caches,
-        fun() ->
-            Value = 
-              case maps:is_key(Cache, Caches) of
-                true ->
-                  cache_delete(Key, Cache, false);
-                false ->
-                  {error, invalid_cache}
-              end,
-            {reply, Value, Caches}
-        end);
+  reply_fun(
+    fun() ->
+        cache_delete(Key, Cache, false)
+    end,
+    Cache, Caches);
 
 handle_call({first, Cache}, _From, Caches) ->
-  reply(Cache, Caches,
-        fun() ->
-            TableName = table_name(Cache),
-            First = case ets:first(TableName) of
-                      '$end_of_table' ->
-                        empty;
-                      Key ->
-                        ets:lookup(TableName, Key)
-                    end,
-            {reply, First, Caches}
-        end);
+  reply_fun(
+    fun() ->
+        TableName = table_name(Cache),
+        case ets:first(TableName) of
+          '$end_of_table' ->
+            empty;
+          Key ->
+            ets:lookup(TableName, Key)
+        end
+    end,
+    Cache, Caches);
 
 handle_call({keys, Cache}, From, Caches) ->
-  reply(Cache, Caches,
-        fun() ->
-            KeysFun = fun(K,_V) -> K end,
-            handle_call({map, KeysFun, Cache}, From, Caches)
-        end);
+  reply_fun(
+    fun() ->
+        MapFun = fun(K,_V) -> K end,
+        handle_call({map, MapFun, Cache}, From, Caches)
+    end, 
+    Cache, Caches);
 
-handle_call({flush, Cache}, _From, Caches) ->
-  reply(Cache, Caches, 
-        fun() ->
-            ets:delete_all_objects(table_name(Cache)),
-            {reply, ok, Caches}
-        end);
+handle_call({map, MapFun, Cache}, _From, Caches) ->
+  reply_fun(
+    fun() ->
+        cache_map(MapFun, Cache)
+    end,
+    Cache, Caches);
 
-%% handle_call({foreach, KVFun, Cache}, _From, Caches) ->
-%%   reply(Cache, Caches, 
-%%         fun() ->
-%%             cache_foreach(KVFun, Cache),
-%%             {reply, ok, Caches}
-%%         end);
-
-handle_call({map, KVFun, Cache}, _From, Caches) ->
-  reply(Cache, Caches, 
-        fun() ->
-            Result = cache_map(KVFun, Cache),
-            {reply, Result, Caches}
-        end);
+handle_call({filter, PredFun, Cache}, _From, Caches) ->
+  reply_fun(
+    fun() ->
+        cache_filter(PredFun, Cache)
+    end,
+    Cache, Caches);
 
 handle_call(Req, _From, Caches) ->
   {reply, {invalid_request, Req}, Caches}.
@@ -197,25 +178,28 @@ handle_call(Req, _From, Caches) ->
 %%
 %% Handle casts
 %%
+handle_cast({ttl, Cache, TTL}, Caches) ->
+  {noreply, maps:put(Cache, TTL, Caches)};
+
 handle_cast({put, Key, Value, Cache}, Caches) ->
   TTL = ttl(Cache, Caches),
   handle_cast({put, Key, Value, TTL, Cache}, Caches);
 
 handle_cast({put, Key, Value, TTL, Cache}, Caches) ->
-  case maps:is_key(Cache, Caches) of
+  case valid_cache(Cache, Caches) of
     true ->
-      cache_put(Key, Value, TTL, Cache),
-      {noreply, Caches};
+      cache_put(Key, Value, TTL, Cache);
     false ->
-      {noreply, Caches}
-  end;
+      skip
+  end,
+  {noreply, Caches};
 
 handle_cast({foreach, KVFun, Cache}, Caches) ->
   cache_foreach(KVFun, Cache),
   {noreply, Caches};
 
 handle_cast({destroy, Cache}, Caches) ->
-  case maps:is_key(Cache, Caches) of
+  case valid_cache(Cache, Caches) of
     true ->
       ets:delete(table_name(Cache)),
       {noreply, maps:remove(Cache, Caches)};
@@ -224,9 +208,18 @@ handle_cast({destroy, Cache}, Caches) ->
   end;
 
 handle_cast({destroy, Key, Cache}, Caches) ->
-  case maps:is_key(Cache, Caches) of
+  case valid_cache(Cache, Caches) of
     true ->
       cache_delete(Key, Cache, true);
+    false ->
+      skip
+  end,
+  {noreply, Caches};
+
+handle_cast({flush, Cache}, Caches) ->
+  case valid_cache(Cache, Caches) of
+    true ->
+      ets:delete_all_objects(table_name(Cache));
     false ->
       skip
   end,
@@ -239,7 +232,7 @@ handle_cast(_Msg, Caches) ->
 %% Handle info
 %%
 handle_info({destroy, Key, Cache}, Caches) ->
-  case maps:is_key(Cache, Caches) of
+  case valid_cache(Cache, Caches) of
     true ->
       ets:delete(table_name(Cache), Key);
     false ->
@@ -264,7 +257,7 @@ code_change(_OldVsn, Caches, _Extra) ->
 %%
 
 update_caches(Cache, TTL, Caches) ->
-  case maps:is_key(Cache, Caches) of
+  case valid_cache(Cache, Caches) of
     true ->
       maps:update(Cache, TTL, Caches);
     false ->
@@ -326,12 +319,32 @@ cache_map(KVFun, Cache) ->
         [KVFun(K,V)] ++ Acc
     end,
   ets:foldl(MapFun, [], table_name(Cache)).
-  
 
-reply(Cache, Caches, ValidCacheFn) ->
-  case maps:is_key(Cache, Caches) of
+cache_filter(PredFun, Cache) ->
+  FilterFun = 
+    fun({K,V}, Acc) ->
+        case PredFun(K,V) of
+          true ->
+            [{K,V}] ++ Acc;
+          false ->
+            Acc
+        end
+    end,
+  ets:foldl(FilterFun, [], table_name(Cache)).
+
+reply_fun(ReplyFun, Cache, Caches) ->
+  case valid_cache(Cache, Caches) of
     true ->
-      ValidCacheFn();
+      {reply, ReplyFun(), Caches};
     false ->
       {reply, {invalid_cache, Cache}, Caches}
   end.
+
+valid_cache(Cache, Caches) ->
+  case ets:info(table_name(Cache)) of
+    undefined ->
+      false;
+    _ ->
+      maps:is_key(Cache, Caches)
+  end.          
+  

@@ -47,7 +47,7 @@ ttl(Cache) ->
 
 %% Set cache TTL (in seconds)
 ttl(Cache, TTL) ->
-  gen_server:call(?CACHE_SRV, {ttl, Cache, TTL}).
+  gen_server:cast(?CACHE_SRV, {ttl, Cache, TTL}).
 
 first(Cache) ->
   gen_server:call(?CACHE_SRV, {first, Cache}).
