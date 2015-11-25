@@ -151,12 +151,8 @@ handle_call({first, Cache}, _From, Caches) ->
     Cache, Caches);
 
 handle_call({keys, Cache}, From, Caches) ->
-  reply_fun(
-    fun() ->
-        MapFun = fun(K,_V) -> K end,
-        handle_call({map, MapFun, Cache}, From, Caches)
-    end, 
-    Cache, Caches);
+  MapFun = fun(K,_V) -> K end,
+  handle_call({map, MapFun, Cache}, From, Caches);
 
 handle_call({map, MapFun, Cache}, _From, Caches) ->
   reply_fun(
