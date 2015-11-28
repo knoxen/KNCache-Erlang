@@ -152,16 +152,12 @@ handle_call({map, MapFun, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
-%%
-%% CxNote Before implementing match, make infinite cache values have the format
-%%    {K, {{time_ref, undefined}, {ttl, infinity}, {value, V}}}
-%%
-%% handle_call({match, Pattern, Cache}, _From, CacheMap) ->
-%%   call_reply(
-%%     fun() ->
-%%         ets:match(Pattern, table_name(Cache))
-%%     end,
-%%     Cache, CacheMap);
+handle_call({match, KeyPattern, ValuePattern, Cache}, _From, CacheMap) ->
+  call_reply(
+    fun() ->
+        ets:match(table_name(Cache), {KeyPattern, {{value,ValuePattern}, '_', '_'}})
+    end,
+    Cache, CacheMap);
 
 handle_call({filter, PredFun, Cache}, _From, CacheMap) ->
   call_reply(

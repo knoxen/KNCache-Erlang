@@ -26,7 +26,7 @@
         ,destroy/2
         ,foreach/2
         ,map/2
-        %% ,match/2
+        ,match/3
         ]).
 
 %%
@@ -100,9 +100,5 @@ foreach(KVFun, Cache) ->
 map(KVFun, Cache) ->
   gen_server:call(?CACHE_SRV, {map, KVFun, Cache}).
 
-%% match(Pattern, Cache) ->
-%%   gen_server:call(?CACHE_SRV, {match, Pattern, Cache}).
-
-
-
-
+match(KeyPattern, ValuePattern, Cache) ->
+  gen_server:call(?CACHE_SRV, {match, KeyPattern, ValuePattern, Cache}).
