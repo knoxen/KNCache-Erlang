@@ -7,6 +7,7 @@
 %%
 -export([make/1
         ,make/2
+        ,make_caches/1
         ,list/0
         ,info/1
         ,info/2
@@ -25,17 +26,21 @@
         ,destroy/2
         ,foreach/2
         ,map/2
+        %% ,match/2
         ]).
 
 %%
 %% 
 %%
 
-make(Caches) ->
-  gen_server:cast(?CACHE_SRV, {make, Caches}).
+make(Cache) ->
+  gen_server:cast(?CACHE_SRV, {make, Cache, infinity}).
 
 make(Cache, TTL) ->
   gen_server:cast(?CACHE_SRV, {make, Cache, TTL}).
+
+make_caches(CacheList) ->
+  gen_server:cast(?CACHE_SRV, {make_caches, CacheList}).
 
 %% List of {Cache, TTL} terms
 list() ->
@@ -94,6 +99,9 @@ foreach(KVFun, Cache) ->
 
 map(KVFun, Cache) ->
   gen_server:call(?CACHE_SRV, {map, KVFun, Cache}).
+
+%% match(Pattern, Cache) ->
+%%   gen_server:call(?CACHE_SRV, {match, Pattern, Cache}).
 
 
 

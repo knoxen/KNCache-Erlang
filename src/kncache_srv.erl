@@ -25,106 +25,108 @@ start_link() ->
   gen_server:start_link({local, ?CACHE_SRV}, ?MODULE, [], []).
 
 init([]) ->
-  Caches = maps:new(), 
-  {ok, Caches}.
+  CacheMap = maps:new(), 
+  {ok, CacheMap}.
 
 %%
 %% Handle calls
 %%
-handle_call(list, _From, Caches) ->
-  {reply, maps:keys(Caches), Caches};
+handle_call(list, _From, CacheMap) ->
+  {reply, maps:keys(CacheMap), CacheMap};
 
-handle_call({info, Cache}, _From, Caches) ->
+handle_call({info, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
         TableName = table_name(Cache),
         Size = ets:info(TableName, size),
         Memory = ets:info(TableName, memory) * erlang:system_info(wordsize),
         Kbs = erlang:trunc(Memory / 100) / 10,
-        TTL = ttl(Cache, Caches),
+        TTL = ttl(Cache, CacheMap),
         [{size, Size}, {kbs, Kbs}, {ttl, TTL}]
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_call({info, Key, Cache}, _From, Caches) ->
+handle_call({info, Key, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
-          [{Key, {{time_ref, TimeRef}, {ttl, TTL}, {value, _Val}}}] ->
+          [{Key, {_, {ttl, infinity}, _}}] ->
+          %% Infinite cached value
+            {expiry, infinity};
+          [{Key, {_, {ttl, TTL}, {time_ref, TimeRef}}}] ->
             case erlang:read_timer(TimeRef) of
               false ->
                 {exiry, expired};
               TimeLeft ->
                 {{expiry, TimeLeft / 1000}, {ttl, TTL}}
             end;
-          %% Infinite cached value
-          [{Key, _Val}] ->
-            {expiry, infinity};
           [] ->
             undefined
         end
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_call({size, Cache}, _From, Caches) ->
+handle_call({size, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
         ets:info(table_name(Cache), size)
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_call({ttl, Cache}, _From, Caches) ->
+handle_call({ttl, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
-        ttl(Cache, Caches)
+        ttl(Cache, CacheMap)
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_call({get, Key, Cache}, From, Caches) ->
-  ValueFn = fun() -> undefined end,
-  handle_call({get, Key, ValueFn, Cache}, From, Caches);
+handle_call({get, Key, Cache}, From, CacheMap) ->
+  handle_call({get, Key, undefined, Cache}, From, CacheMap);
 
-handle_call({get, Key, ValueFn, Cache}, _From, Caches) ->
+handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
-          %% Cached value scheduled for deletion
-          [{Key, {{time_ref, TimeRef}, {ttl, TTL}, {value, Value}}}] ->
-            %% Cancel the current timer
+          [{Key, {{value, Value}, {ttl, infinity}, _}}] ->
+            %% Infinite cached value. Just return value.
+            {ok, Value};
+          [{Key, {{value, Value}, {ttl, TTL}, {time_ref, TimeRef}}}] ->
+            %% TTL cached value. Cancel the current timer.
             erlang:cancel_timer(TimeRef),
-            %% Put the value back in the cache to start a new timer
+            %% Put value back in cache to refresh timer
             cache_put(Key, Value, TTL, Cache),
             {ok, Value};
-          %% Infinite cached value
-          [{Key, Value}] ->
-            {ok, Value};
-          %% Generate, cache, and return a new value
+          %% No cached value.
           [] ->
-            %% Generate value and insert into cache unless undefined
-            case ValueFn() of
+            case ValueFun of
               undefined ->
+                %% No cached value and no Value Fun to generate one.
                 undefined;
-              {NewValue, TTL} ->
-                %% Cache and return newly created value
-                cache_put(Key, NewValue, TTL, Cache),
-                {ok, NewValue};
-              NewValue ->
-                %% Cache and return newly created value
-                cache_put(Key, NewValue, ttl(Cache, Caches), Cache),
-                {ok, NewValue}
+              _ ->
+                %% Use Value Fun to generate a new value
+                case ValueFun() of
+                  {NewValue, TTL} ->
+                    %% Value Fun specifies TTL
+                    cache_put(Key, NewValue, TTL, Cache),
+                    {ok, NewValue};
+                  NewValue ->
+                    %% Use Cache default TTL
+                    cache_put(Key, NewValue, ttl(Cache, CacheMap), Cache),
+                    {ok, NewValue}
+                end
             end
         end
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_call({delete, Key, Cache}, _From, Caches) ->
+handle_call({delete, Key, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
         cache_delete(Key, Cache, false)
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_call({first, Cache}, _From, Caches) ->
+handle_call({first, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
         TableName = table_name(Cache),
@@ -135,150 +137,175 @@ handle_call({first, Cache}, _From, Caches) ->
             ets:lookup(TableName, Key)
         end
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_call({keys, Cache}, From, Caches) ->
+handle_call({keys, Cache}, From, CacheMap) ->
   MapFun = fun(K,_V) -> K end,
-  handle_call({map, MapFun, Cache}, From, Caches);
+  handle_call({map, MapFun, Cache}, From, CacheMap);
 
-handle_call({map, MapFun, Cache}, _From, Caches) ->
+handle_call({map, MapFun, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
-        cache_map(MapFun, Cache)
+        ets:foldl(fun({K,V}, Acc) -> [MapFun(K,V)] ++ Acc end,
+                  [],
+                  table_name(Cache))
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_call({filter, PredFun, Cache}, _From, Caches) ->
+%%
+%% CxNote Before implementing match, make infinite cache values have the format
+%%    {K, {{time_ref, undefined}, {ttl, infinity}, {value, V}}}
+%%
+%% handle_call({match, Pattern, Cache}, _From, CacheMap) ->
+%%   call_reply(
+%%     fun() ->
+%%         ets:match(Pattern, table_name(Cache))
+%%     end,
+%%     Cache, CacheMap);
+
+handle_call({filter, PredFun, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
-        cache_filter(PredFun, Cache)
+        ets:foldl(
+          fun({K,V}, Acc) ->
+              case PredFun(K,V) of
+                true ->
+                  [{K,V}] ++ Acc;
+                false ->
+                  Acc
+              end
+          end,
+          [],
+          table_name(Cache))
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_call(Req, _From, Caches) ->
-  {reply, {invalid_request, Req}, Caches}.
+handle_call(Req, _From, CacheMap) ->
+  {reply, {invalid_request, Req}, CacheMap}.
 
 %%
 %% Handle casts
 %%
-handle_cast({make, Cache, TTL}, Caches) ->
-  {noreply, update_caches(Cache, TTL, Caches)};
+handle_cast({make, Cache, TTL}, CacheMap) ->
+  UpdatedCacheMap = make_cache(Cache, TTL, CacheMap),
+  {noreply, UpdatedCacheMap};
 
-handle_cast({make, CacheList}, Caches) ->
-  NewCaches = 
-    lists:foldl(
-      fun({Cache, TTL}, Acc) ->
-          update_caches(Cache, TTL, Acc)
-      end,
-      Caches, CacheList),
-  {noreply, NewCaches};
+handle_cast({make_caches, CacheList}, CacheMap) ->
+  UpdatedCacheMap = lists:foldl(
+                   fun({Cache, TTL}, Acc) ->
+                       make_cache(Cache, TTL, Acc)
+                   end,
+                   CacheMap, CacheList),
+  {noreply, UpdatedCacheMap};
 
-handle_cast({ttl, Cache, TTL}, Caches) ->
-  {noreply, maps:put(Cache, TTL, Caches)};
+handle_cast({ttl, Cache, TTL}, CacheMap) ->
+  {noreply, maps:put(Cache, TTL, CacheMap)};
 
-handle_cast({put, Key, Value, Cache}, Caches) ->
+handle_cast({put, Key, Value, Cache}, CacheMap) ->
   cast_reply(
     fun() ->
-        cache_put(Key, Value, ttl(Cache, Caches), Cache)
+        cache_put(Key, Value, ttl(Cache, CacheMap), Cache)
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_cast({put, Key, Value, TTL, Cache}, Caches) ->
+handle_cast({put, Key, Value, TTL, Cache}, CacheMap) ->
   cast_reply(
     fun() ->
         cache_put(Key, Value, TTL, Cache)
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_cast({foreach, KVFun, Cache}, Caches) ->
+handle_cast({foreach, KVFun, Cache}, CacheMap) ->
   cast_reply(
     fun() ->
-        cache_foreach(KVFun, Cache)
+        ets:foldl(fun({K,V}, _Acc) -> KVFun(K,V) end,
+                  undefined, table_name(Cache))
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_cast({destroy, Cache}, Caches) ->
-  case valid_cache(Cache, Caches) of
+handle_cast({destroy, Cache}, CacheMap) ->
+  case valid_cache(Cache, CacheMap) of
     true ->
       ets:delete(table_name(Cache)),
-      {noreply, maps:remove(Cache, Caches)};
+      {noreply, maps:remove(Cache, CacheMap)};
     false ->
-      {noreply, Caches}
+      {noreply, CacheMap}
   end;
 
-handle_cast({destroy, Key, Cache}, Caches) ->
+handle_cast({destroy, Key, Cache}, CacheMap) ->
   cast_reply(
     fun() ->
         cache_delete(Key, Cache, true)
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_cast({flush, Cache}, Caches) ->
+handle_cast({flush, Cache}, CacheMap) ->
   cast_reply(
     fun() ->
         ets:delete_all_objects(table_name(Cache))
     end,
-    Cache, Caches);
+    Cache, CacheMap);
 
-handle_cast(_Msg, Caches) ->
-  {noreply, Caches}.
+handle_cast(_Msg, CacheMap) ->
+  {noreply, CacheMap}.
 
 %%
 %% Handle info
 %%
-handle_info({destroy, Key, Cache}, Caches) ->
-  case valid_cache(Cache, Caches) of
+handle_info({destroy, Key, Cache}, CacheMap) ->
+  case valid_cache(Cache, CacheMap) of
     true ->
       ets:delete(table_name(Cache), Key);
     false ->
       skip
   end,
-  {noreply, Caches};
+  {noreply, CacheMap};
 
-handle_info(_Info, Caches) ->
-  {noreply, Caches}.
+handle_info(_Info, CacheMap) ->
+  {noreply, CacheMap}.
 
 %%
 %% 
 %%
-terminate(_Reason, _Caches) ->
+terminate(_Reason, _CacheMap) ->
   ok.
 
-code_change(_OldVsn, Caches, _Extra) ->
-  {ok, Caches}.
+code_change(_OldVsn, CacheMap, _Extra) ->
+  {ok, CacheMap}.
 
 %%
 %% Internal functions
 %%
-
-update_caches(Cache, TTL, Caches) ->
-  case valid_cache(Cache, Caches) of
-    true ->
-      maps:update(Cache, TTL, Caches);
+make_cache(Cache, TTL, CacheMap) ->
+  case valid_cache(Cache, CacheMap) of
     false ->
       TableName = table_name(Cache),
       ets:new(TableName, [named_table, public]),
-      maps:put(Cache, TTL, Caches)
+      maps:put(Cache, TTL, CacheMap);
+    true ->
+      CacheMap
   end.
 
 table_name(Cache) ->
   list_to_atom("kncache_" ++ atom_to_list(Cache)).
 
-ttl(Cache, Caches) ->
-  case maps:get(Cache, Caches) of
+ttl(Cache, CacheMap) ->
+  case maps:get(Cache, CacheMap) of
     0 ->
       infinity;
     TTL ->
       TTL
   end.
 
-cache_put(Key, Value, infinity, Cache) ->
-  ets:insert(table_name(Cache), {Key, Value}),
-  ok;
 cache_put(Key, Value, TTL, Cache) ->
-  TimeRef = erlang:send_after(TTL*1000, ?CACHE_SRV, {destroy, Key, Cache}),
-  TimedValue = {{time_ref, TimeRef}, {ttl, TTL}, {value, Value}},
-  ets:insert(table_name(Cache), {Key, TimedValue}),
+  TimeRef = case TTL of
+              infinity ->
+                undefined;
+              _ ->
+                erlang:send_after(TTL*1000, ?CACHE_SRV, {destroy, Key, Cache})
+            end,
+  StoredValue = {{value, Value}, {ttl, TTL}, {time_ref, TimeRef}},
+  ets:insert(table_name(Cache), {Key, StoredValue}),
   ok.
 
 cache_delete(Key, Cache, Force) ->
@@ -301,54 +328,28 @@ cache_delete(Key, Cache, Force) ->
       no_match
   end.
 
-cache_foreach(KVFun, Cache) ->
-  ForeachFun = 
-    fun({K,V}, _Acc) ->
-        KVFun(K,V)
-    end,
-  ets:foldl(ForeachFun, undefined, table_name(Cache)).
-
-cache_map(KVFun, Cache) ->
-  MapFun = 
-    fun({K,V}, Acc) ->
-        [KVFun(K,V)] ++ Acc
-    end,
-  ets:foldl(MapFun, [], table_name(Cache)).
-
-cache_filter(PredFun, Cache) ->
-  FilterFun = 
-    fun({K,V}, Acc) ->
-        case PredFun(K,V) of
-          true ->
-            [{K,V}] ++ Acc;
-          false ->
-            Acc
-        end
-    end,
-  ets:foldl(FilterFun, [], table_name(Cache)).
-
-call_reply(Fun, Cache, Caches) ->
-  case valid_cache(Cache, Caches) of
+call_reply(Fun, Cache, CacheMap) ->
+  case valid_cache(Cache, CacheMap) of
     true ->
-      {reply, Fun(), Caches};
+      {reply, Fun(), CacheMap};
     false ->
-      {reply, {invalid_cache, Cache}, Caches}
+      {reply, {invalid_cache, Cache}, CacheMap}
   end.
 
-cast_reply(Fun, Cache, Caches) ->
-  case valid_cache(Cache, Caches) of
+cast_reply(Fun, Cache, CacheMap) ->
+  case valid_cache(Cache, CacheMap) of
     true ->
       Fun();
     false ->
       skip
   end,
-  {noreply, Caches}.
+  {noreply, CacheMap}.
 
-valid_cache(Cache, Caches) ->
+valid_cache(Cache, CacheMap) ->
   case ets:info(table_name(Cache)) of
     undefined ->
       false;
     _ ->
-      maps:is_key(Cache, Caches)
+      maps:is_key(Cache, CacheMap)
   end.          
   
