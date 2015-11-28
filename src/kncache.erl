@@ -86,7 +86,7 @@ delete(Key, Cache) ->
   gen_server:call(?CACHE_SRV, {delete, Key, Cache}).
 
 flush(Cache) ->
-  gen_server:call(?CACHE_SRV, {flush, Cache}).
+  gen_server:cast(?CACHE_SRV, {flush, Cache}).
 
 destroy(Cache) ->
   gen_server:cast(?CACHE_SRV, {destroy, Cache}).
