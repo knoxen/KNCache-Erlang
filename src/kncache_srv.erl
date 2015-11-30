@@ -81,7 +81,7 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
             case ValueFun of
               undefined ->
                 %% No cached value and no Value Fun to generate one.
-                no_match;
+                undefined;
               _ ->
                 %% Use Value Fun to generate a new value
                 case ValueFun() of
@@ -114,7 +114,7 @@ handle_call({peek, Key, Cache}, _From, CacheMap) ->
                 {Value, [{expiry, TimeLeft / 1000}, {ttl, TTL}]}
             end;
           [] ->
-            no_match
+            undefined
         end
     end,
     Cache, CacheMap);
@@ -322,7 +322,7 @@ cache_delete(Key, Cache, Force) ->
       ets:delete(TableName, Key),
       {ok, Value};
     _ ->
-      no_match
+      undefined
   end.
 
 call_reply(Fun, Cache, CacheMap) ->
