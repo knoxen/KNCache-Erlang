@@ -221,16 +221,7 @@ handle_cast({foreach, KVFun, Cache}, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_cast({destroy, Cache}, CacheMap) ->
-  case valid_cache(Cache, CacheMap) of
-    true ->
-      ets:delete(table_name(Cache)),
-      {noreply, maps:remove(Cache, CacheMap)};
-    false ->
-      {noreply, CacheMap}
-  end;
-
-handle_cast({destroy, Key, Cache}, CacheMap) ->
+handle_cast({delete, Key, Cache}, CacheMap) ->
   cast_reply(
     fun() ->
         cache_delete(Key, Cache, true)
@@ -243,6 +234,15 @@ handle_cast({flush, Cache}, CacheMap) ->
         ets:delete_all_objects(table_name(Cache))
     end,
     Cache, CacheMap);
+
+handle_cast({destroy, Cache}, CacheMap) ->
+  case valid_cache(Cache, CacheMap) of
+    true ->
+      ets:delete(table_name(Cache)),
+      {noreply, maps:remove(Cache, CacheMap)};
+    false ->
+      {noreply, CacheMap}
+  end;
 
 handle_cast(_Msg, CacheMap) ->
   {noreply, CacheMap}.

@@ -21,9 +21,9 @@
         ,get/3
         ,peek/2
         ,remove/2
+        ,delete/2
         ,flush/1
         ,destroy/1
-        ,destroy/2
         ,foreach/2
         ,map/2
         ,match/3
@@ -85,14 +85,14 @@ peek(Key, Cache) ->
 remove(Key, Cache) ->
   gen_server:call(?CACHE_SRV, {remove, Key, Cache}).
 
+delete(Key, Cache) ->
+  gen_server:cast(?CACHE_SRV, {delete, Key, Cache}).
+
 flush(Cache) ->
   gen_server:cast(?CACHE_SRV, {flush, Cache}).
 
 destroy(Cache) ->
   gen_server:cast(?CACHE_SRV, {destroy, Cache}).
-
-destroy(Key, Cache) ->
-  gen_server:cast(?CACHE_SRV, {destroy, Key, Cache}).
 
 foreach(KVFun, Cache) ->
   gen_server:cast(?CACHE_SRV, {foreach, KVFun, Cache}).
