@@ -10,7 +10,6 @@
         ,make_caches/1
         ,list/0
         ,info/1
-        ,info/2
         ,size/1
         ,ttl/1
         ,ttl/2
@@ -20,6 +19,7 @@
         ,put/4
         ,get/2
         ,get/3
+        ,peek/2
         ,delete/2
         ,flush/1
         ,destroy/1
@@ -64,9 +64,6 @@ keys(Cache) ->
 info(Cache) ->
   gen_server:call(?CACHE_SRV, {info, Cache}).
 
-info(Key, Cache) ->
-  gen_server:call(?CACHE_SRV, {info, Key, Cache}).
-
 size(Cache) ->
   gen_server:call(?CACHE_SRV, {size, Cache}).
 
@@ -81,6 +78,9 @@ get(Key, Cache) ->
 
 get(Key, ValueFn, Cache) ->
   gen_server:call(?CACHE_SRV, {get, Key, ValueFn, Cache}).
+
+peek(Key, Cache) ->
+  gen_server:call(?CACHE_SRV, {peek, Key, Cache}).
 
 delete(Key, Cache) ->
   gen_server:call(?CACHE_SRV, {delete, Key, Cache}).

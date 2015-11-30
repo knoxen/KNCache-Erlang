@@ -46,26 +46,6 @@ handle_call({info, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_call({info, Key, Cache}, _From, CacheMap) ->
-  call_reply(
-    fun() ->
-        case ets:lookup(table_name(Cache), Key) of
-          [{Key, {_, {ttl, infinity}, _}}] ->
-          %% Infinite cached value
-            {expiry, infinity};
-          [{Key, {_, {ttl, TTL}, {time_ref, TimeRef}}}] ->
-            case erlang:read_timer(TimeRef) of
-              false ->
-                {exiry, expired};
-              TimeLeft ->
-                {{expiry, TimeLeft / 1000}, {ttl, TTL}}
-            end;
-          [] ->
-            undefined
-        end
-    end,
-    Cache, CacheMap);
-
 handle_call({size, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
@@ -87,10 +67,10 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
-          [{Key, {{value, Value}, {ttl, infinity}, _}}] ->
+          [{Key, {Value, {ttl, infinity}, _}}] ->
             %% Infinite cached value. Just return value.
             {ok, Value};
-          [{Key, {{value, Value}, {ttl, TTL}, {time_ref, TimeRef}}}] ->
+          [{Key, {Value, {ttl, TTL}, {time_ref, TimeRef}}}] ->
             %% TTL cached value. Cancel the current timer.
             erlang:cancel_timer(TimeRef),
             %% Put value back in cache to refresh timer
@@ -115,6 +95,26 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
                     {ok, NewValue}
                 end
             end
+        end
+    end,
+    Cache, CacheMap);
+
+handle_call({peek, Key, Cache}, _From, CacheMap) ->
+  call_reply(
+    fun() ->
+        case ets:lookup(table_name(Cache), Key) of
+          [{Key, {Value, {ttl, infinity}, _}}] ->
+          %% Infinite cached value
+            {Value, {expiry, infinity}};
+          [{Key, {Value, {ttl, TTL}, {time_ref, TimeRef}}}] ->
+            case erlang:read_timer(TimeRef) of
+              false ->
+                {exiry, expired};
+              TimeLeft ->
+                {Value, {expiry, TimeLeft / 1000}, {ttl, TTL}}
+            end;
+          [] ->
+            undefined
         end
     end,
     Cache, CacheMap);
@@ -155,7 +155,7 @@ handle_call({map, MapFun, Cache}, _From, CacheMap) ->
 handle_call({match, KeyPattern, ValuePattern, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
-        ets:match(table_name(Cache), {KeyPattern, {{value,ValuePattern}, '_', '_'}})
+        ets:match(table_name(Cache), {KeyPattern, {ValuePattern, '_', '_'}})
     end,
     Cache, CacheMap);
 
@@ -300,14 +300,14 @@ cache_put(Key, Value, TTL, Cache) ->
               _ ->
                 erlang:send_after(TTL*1000, ?CACHE_SRV, {destroy, Key, Cache})
             end,
-  StoredValue = {{value, Value}, {ttl, TTL}, {time_ref, TimeRef}},
+  StoredValue = {Value, {ttl, TTL}, {time_ref, TimeRef}},
   ets:insert(table_name(Cache), {Key, StoredValue}),
   ok.
 
 cache_delete(Key, Cache, Force) ->
   TableName = table_name(Cache),
   case ets:lookup(TableName, Key) of
-    [{Key, {{time_ref, TimeRef}, {ttl, _TTL}, {value, Value}}}] ->
+    [{Key, {Value, {ttl, _TTL}, {time_ref, TimeRef}}}] ->
       erlang:cancel_timer(TimeRef),
       ets:delete(TableName, Key),
       {ok, Value};
