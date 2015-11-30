@@ -105,7 +105,7 @@ handle_call({peek, Key, Cache}, _From, CacheMap) ->
         case ets:lookup(table_name(Cache), Key) of
           [{Key, {Value, [{ttl, infinity}, _]}}] ->
           %% Infinite cached value
-            {Value, [{expiry, infinity}, {ttl, infinity}]};
+            {Value, [{expiry, never}, {ttl, infinity}]};
           [{Key, {Value, [{ttl, TTL}, {time_ref, TimeRef}]}}] ->
             case erlang:read_timer(TimeRef) of
               false ->
@@ -119,7 +119,7 @@ handle_call({peek, Key, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_call({delete, Key, Cache}, _From, CacheMap) ->
+handle_call({remove, Key, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
         cache_delete(Key, Cache, false)
@@ -308,7 +308,7 @@ cache_put(Key, Value, TTL, Cache) ->
 cache_delete(Key, Cache, Force) ->
   TableName = table_name(Cache),
   case ets:lookup(TableName, Key) of
-    [{Key, {Value, [{ttl, infinity}, {time_ref, undefined}]}}] ->
+    [{Key, {Value, [{ttl, infinity}, _]}}] ->
       %% Infinite TTL; only delete if force is true
       case Force of 
         true ->
@@ -317,7 +317,7 @@ cache_delete(Key, Cache, Force) ->
           skip
       end,
       {ok, Value};
-    [{Key, {Value, [{ttl, _TTL}, {time_ref, TimeRef}]}}] ->
+    [{Key, {Value, [{ttl, _}, {time_ref, TimeRef}]}}] ->
       erlang:cancel_timer(TimeRef),
       ets:delete(TableName, Key),
       {ok, Value};

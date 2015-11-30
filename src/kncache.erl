@@ -20,7 +20,7 @@
         ,get/2
         ,get/3
         ,peek/2
-        ,delete/2
+        ,remove/2
         ,flush/1
         ,destroy/1
         ,destroy/2
@@ -82,8 +82,8 @@ get(Key, ValueFn, Cache) ->
 peek(Key, Cache) ->
   gen_server:call(?CACHE_SRV, {peek, Key, Cache}).
 
-delete(Key, Cache) ->
-  gen_server:call(?CACHE_SRV, {delete, Key, Cache}).
+remove(Key, Cache) ->
+  gen_server:call(?CACHE_SRV, {remove, Key, Cache}).
 
 flush(Cache) ->
   gen_server:cast(?CACHE_SRV, {flush, Cache}).
