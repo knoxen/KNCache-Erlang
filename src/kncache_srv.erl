@@ -155,7 +155,7 @@ handle_call({map, MapFun, Cache}, _From, CacheMap) ->
 handle_call({match, KeyPattern, ValuePattern, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
-        ets:match(table_name(Cache), {KeyPattern, {ValuePattern, '_', '_'}})
+        ets:match(table_name(Cache), {KeyPattern, {ValuePattern, '_'}})
     end,
     Cache, CacheMap);
 
