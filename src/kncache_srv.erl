@@ -81,7 +81,7 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
             case ValueFun of
               undefined ->
                 %% No cached value and no Value Fun to generate one.
-                undefined;
+                no_match;
               _ ->
                 %% Use Value Fun to generate a new value
                 case ValueFun() of
@@ -103,18 +103,18 @@ handle_call({peek, Key, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
-          [{Key, {Value, {ttl, infinity}, _}}] ->
+          [{Key, {Value, [{ttl, infinity}, _]}}] ->
           %% Infinite cached value
-            {Value, {expiry, infinity}};
-          [{Key, {Value, {ttl, TTL}, {time_ref, TimeRef}}}] ->
+            {Value, [{expiry, infinity}, {ttl, infinity}]};
+          [{Key, {Value, [{ttl, TTL}, {time_ref, TimeRef}]}}] ->
             case erlang:read_timer(TimeRef) of
               false ->
-                {exiry, expired};
+                {Value, [{exiry, expired}, {ttl, TTL}]};
               TimeLeft ->
-                {Value, {expiry, TimeLeft / 1000}, {ttl, TTL}}
+                {Value, [{expiry, TimeLeft / 1000}, {ttl, TTL}]}
             end;
           [] ->
-            undefined
+            no_match
         end
     end,
     Cache, CacheMap);
@@ -214,7 +214,9 @@ handle_cast({put, Key, Value, TTL, Cache}, CacheMap) ->
 handle_cast({foreach, KVFun, Cache}, CacheMap) ->
   cast_reply(
     fun() ->
-        ets:foldl(fun({K,V}, _Acc) -> KVFun(K,V) end,
+        ets:foldl(fun({K,V}, _Acc) ->
+                      KVFun(K,V)
+                  end,
                   undefined, table_name(Cache))
     end,
     Cache, CacheMap);
