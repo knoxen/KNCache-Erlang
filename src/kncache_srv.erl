@@ -99,6 +99,13 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
+handle_call({exists, Key, Cache}, _From, CacheMap) ->
+  call_reply(
+    fun() ->
+        ets:member(table_name(Cache), Key)
+    end,
+    Cache, CacheMap);
+
 handle_call({peek, Key, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
