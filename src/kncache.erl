@@ -2,103 +2,196 @@
 
 -define(CACHE_SRV, kncache_srv).
 
-%%
-%% Cache API
-%%
+%% Cache Lifecycle
 -export([make/1
         ,make/2
         ,make_caches/1
-        ,list/0
+        ,flush/1
+        ,destroy/1
+        ]).
+
+
+%% Cache Info
+-export([list/0
         ,info/1
         ,size/1
         ,ttl/1
         ,ttl/2
-        ,first/1
         ,keys/1
-        ,put/3
+        ]).
+
+%% Cache Access
+-export([put/3
         ,put/4
         ,get/2
         ,get/3
         ,peek/2
         ,remove/2
         ,delete/2
-        ,flush/1
-        ,destroy/1
-        ,foreach/2
-        ,map/2
-        ,match/3
         ]).
 
-%%
-%% 
-%%
+%% Cache Transforms
+-export([foreach/2
+        ,map/2
+        ,match/3
+        ,filter/2
+        ,dump/1
+        ]).
 
+%%==========================================================================================
+%%
+%%  Cache Lifecycle
+%%
+%%==========================================================================================
+%%------------------------------------------------------------------------------------------
+%% Make cache with infinite TTL
+%%------------------------------------------------------------------------------------------
 make(Cache) ->
   gen_server:cast(?CACHE_SRV, {make, Cache, infinity}).
 
+%%------------------------------------------------------------------------------------------
+%% Make cache with TTL
+%%------------------------------------------------------------------------------------------
 make(Cache, TTL) ->
   gen_server:cast(?CACHE_SRV, {make, Cache, TTL}).
 
+%%------------------------------------------------------------------------------------------
+%% Make list of caches
+%%------------------------------------------------------------------------------------------
 make_caches(CacheList) ->
   gen_server:cast(?CACHE_SRV, {make_caches, CacheList}).
 
-%% List of {Cache, TTL} terms
-list() ->
-  gen_server:call(?CACHE_SRV, list).
-
-%% Cache TTL (in seconds)
-ttl(Cache) ->
-  gen_server:call(?CACHE_SRV, {ttl, Cache}).
-
-%% Set cache TTL (in seconds)
-ttl(Cache, TTL) ->
-  gen_server:cast(?CACHE_SRV, {ttl, Cache, TTL}).
-
-first(Cache) ->
-  gen_server:call(?CACHE_SRV, {first, Cache}).
-
-keys(Cache) ->
-  gen_server:call(?CACHE_SRV, {keys, Cache}).
-
-%% 
-info(Cache) ->
-  gen_server:call(?CACHE_SRV, {info, Cache}).
-
-size(Cache) ->
-  gen_server:call(?CACHE_SRV, {size, Cache}).
-
-put(Key, Value, Cache) ->
-  gen_server:cast(?CACHE_SRV, {put, Key, Value, Cache}).
-
-put(Key, Value, TTL, Cache) ->
-  gen_server:cast(?CACHE_SRV, {put, Key, Value, TTL, Cache}).
-
-get(Key, Cache) ->
-  gen_server:call(?CACHE_SRV, {get, Key, Cache}).
-
-get(Key, ValueFn, Cache) ->
-  gen_server:call(?CACHE_SRV, {get, Key, ValueFn, Cache}).
-
-peek(Key, Cache) ->
-  gen_server:call(?CACHE_SRV, {peek, Key, Cache}).
-
-remove(Key, Cache) ->
-  gen_server:call(?CACHE_SRV, {remove, Key, Cache}).
-
-delete(Key, Cache) ->
-  gen_server:cast(?CACHE_SRV, {delete, Key, Cache}).
-
+%%------------------------------------------------------------------------------------------
+%% Flush cache entries
+%%------------------------------------------------------------------------------------------
 flush(Cache) ->
   gen_server:cast(?CACHE_SRV, {flush, Cache}).
 
+%%------------------------------------------------------------------------------------------
+%% Destroy cache
+%%------------------------------------------------------------------------------------------
 destroy(Cache) ->
   gen_server:cast(?CACHE_SRV, {destroy, Cache}).
 
+%%==========================================================================================
+%%
+%% Cache Info
+%%
+%%==========================================================================================
+%%------------------------------------------------------------------------------------------
+%% List of current caches
+%%------------------------------------------------------------------------------------------
+list() ->
+  gen_server:call(?CACHE_SRV, list).
+
+%%------------------------------------------------------------------------------------------
+%% Get cache information
+%%------------------------------------------------------------------------------------------
+info(Cache) ->
+  gen_server:call(?CACHE_SRV, {info, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Get number of cache entries
+%%------------------------------------------------------------------------------------------
+size(Cache) ->
+  gen_server:call(?CACHE_SRV, {size, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Get cache TTL (in seconds)
+%%------------------------------------------------------------------------------------------
+ttl(Cache) ->
+  gen_server:call(?CACHE_SRV, {ttl, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Set cache TTL (in seconds)
+%%------------------------------------------------------------------------------------------
+ttl(Cache, TTL) ->
+  gen_server:cast(?CACHE_SRV, {ttl, Cache, TTL}).
+
+%%------------------------------------------------------------------------------------------
+%% Get list of cache keys
+%%------------------------------------------------------------------------------------------
+keys(Cache) ->
+  gen_server:call(?CACHE_SRV, {keys, Cache}).
+
+%%==========================================================================================
+%%
+%% Cache Access
+%%
+%%==========================================================================================
+%%------------------------------------------------------------------------------------------
+%% Put Key/Value with default cache TTL
+%%------------------------------------------------------------------------------------------
+put(Key, Value, Cache) ->
+  gen_server:cast(?CACHE_SRV, {put, Key, Value, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Put Key/Value with TTL
+%%------------------------------------------------------------------------------------------
+put(Key, Value, TTL, Cache) ->
+  gen_server:cast(?CACHE_SRV, {put, Key, Value, TTL, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Get cache Key value
+%%------------------------------------------------------------------------------------------
+get(Key, Cache) ->
+  gen_server:call(?CACHE_SRV, {get, Key, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Get cache value with cache miss function
+%%------------------------------------------------------------------------------------------
+get(Key, ValueFn, Cache) ->
+  gen_server:call(?CACHE_SRV, {get, Key, ValueFn, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Peek at cache entry
+%%------------------------------------------------------------------------------------------
+peek(Key, Cache) ->
+  gen_server:call(?CACHE_SRV, {peek, Key, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Remove cache entry and return value
+%%------------------------------------------------------------------------------------------
+remove(Key, Cache) ->
+  gen_server:call(?CACHE_SRV, {remove, Key, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Delete cache entry
+%%------------------------------------------------------------------------------------------
+delete(Key, Cache) ->
+  gen_server:cast(?CACHE_SRV, {delete, Key, Cache}).
+
+%%==========================================================================================
+%%
+%% Cache Transforms
+%%
+%%==========================================================================================
+%%------------------------------------------------------------------------------------------
+%% Perform function on each cache entry
+%%------------------------------------------------------------------------------------------
 foreach(KVFun, Cache) ->
   gen_server:cast(?CACHE_SRV, {foreach, KVFun, Cache}).
 
+%%------------------------------------------------------------------------------------------
+%% Return list of function run on each cache entry
+%%------------------------------------------------------------------------------------------
 map(KVFun, Cache) ->
   gen_server:call(?CACHE_SRV, {map, KVFun, Cache}).
 
+%%------------------------------------------------------------------------------------------
+%% Return list of Key / Value entries that match patterns
+%%------------------------------------------------------------------------------------------
 match(KeyPattern, ValuePattern, Cache) ->
   gen_server:call(?CACHE_SRV, {match, KeyPattern, ValuePattern, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Return list of Key / Value entries that match patterns
+%%------------------------------------------------------------------------------------------
+filter(KVFun, Cache) ->
+  gen_server:call(?CACHE_SRV, {filter, KVFun, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Return list of all Key / Value entries
+%%------------------------------------------------------------------------------------------
+dump(Cache) ->
+  gen_server:call(?CACHE_SRV, {dump, Cache}).

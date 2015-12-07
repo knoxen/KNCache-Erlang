@@ -126,19 +126,6 @@ handle_call({remove, Key, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_call({first, Cache}, _From, CacheMap) ->
-  call_reply(
-    fun() ->
-        TableName = table_name(Cache),
-        case ets:first(TableName) of
-          '$end_of_table' ->
-            empty;
-          Key ->
-            ets:lookup(TableName, Key)
-        end
-    end,
-    Cache, CacheMap);
-
 handle_call({keys, Cache}, From, CacheMap) ->
   MapFun = fun(K,_V) -> K end,
   handle_call({map, MapFun, Cache}, From, CacheMap);
@@ -163,7 +150,7 @@ handle_call({filter, PredFun, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
         ets:foldl(
-          fun({K,V}, Acc) ->
+          fun({K,{V, _}}, Acc) ->
               case PredFun(K,V) of
                 true ->
                   [{K,V}] ++ Acc;
@@ -175,6 +162,9 @@ handle_call({filter, PredFun, Cache}, _From, CacheMap) ->
           table_name(Cache))
     end,
     Cache, CacheMap);
+
+handle_call({dump, Cache}, From, CacheMap) ->
+  handle_call({match, '$1', '$2', Cache}, From, CacheMap);
 
 handle_call(Req, _From, CacheMap) ->
   {reply, {invalid_request, Req}, CacheMap}.
