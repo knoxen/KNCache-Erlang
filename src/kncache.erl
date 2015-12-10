@@ -36,6 +36,7 @@
         ,map/2
         ,match/3
         ,filter/2
+        ,count/2
         ,dump/1
         ]).
 
@@ -192,10 +193,16 @@ match(KeyPattern, ValuePattern, Cache) ->
   gen_server:call(?CACHE_SRV, {match, KeyPattern, ValuePattern, Cache}).
 
 %%------------------------------------------------------------------------------------------
-%% Return list of Key / Value entries that match patterns
+%% Return list of entries that KVFun returns true
 %%------------------------------------------------------------------------------------------
 filter(KVFun, Cache) ->
   gen_server:call(?CACHE_SRV, {filter, KVFun, Cache}).
+
+%%------------------------------------------------------------------------------------------
+%% Return count of entries that KVFun returns true
+%%------------------------------------------------------------------------------------------
+count(KVFun, Cache) ->
+  gen_server:call(?CACHE_SRV, {count, KVFun, Cache}).
 
 %%------------------------------------------------------------------------------------------
 %% Return list of all Key / Value entries

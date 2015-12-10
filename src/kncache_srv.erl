@@ -170,6 +170,23 @@ handle_call({filter, PredFun, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
+handle_call({count, PredFun, Cache}, _From, CacheMap) ->
+  call_reply(
+    fun() ->
+        ets:foldl(
+          fun({K,{V, _}}, Acc) ->
+              case PredFun(K,V) of
+                true ->
+                  Acc + 1;
+                false ->
+                  Acc
+              end
+          end,
+          0,
+          table_name(Cache))
+    end,
+    Cache, CacheMap);
+
 handle_call({dump, Cache}, From, CacheMap) ->
   handle_call({match, '$1', '$2', Cache}, From, CacheMap);
 
