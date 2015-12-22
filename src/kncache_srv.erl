@@ -356,11 +356,14 @@ cast_reply(Fun, Cache, CacheMap) ->
   end,
   {noreply, CacheMap}.
 
-valid_cache(Cache, CacheMap) ->
+valid_cache(Cache, CacheMap) when is_atom(Cache) ->
   case ets:info(table_name(Cache)) of
     undefined ->
       false;
     _ ->
       maps:is_key(Cache, CacheMap)
-  end.          
+  end;
+valid_cache(_Cache, _Map) ->
+  false.
+
   
