@@ -70,11 +70,8 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
           [{Key, {Value, [{ttl, infinity}, _]}}] ->
             %% Infinite cached value. Just return value.
             {ok, Value};
-          [{Key, {Value, [{ttl, TTL}, {time_ref, TimeRef}]}}] ->
-            %% TTL cached value. Cancel the current timer.
-            erlang:cancel_timer(TimeRef),
-            %% Put value back in cache to refresh timer
-            cache_put(Key, Value, TTL, Cache),
+          [{Key, {Value, [{ttl, _TTL}, {time_ref, _TimeRef}]}}] ->
+            gen_server:cast(?CACHE_SRV, {touch, Key, Cache}),
             {ok, Value};
           %% No cached value.
           [] ->
@@ -96,6 +93,13 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
                 end
             end
         end
+    end,
+    Cache, CacheMap);
+
+handle_call({touch, Key, Cache}, _From, CacheMap) ->
+  call_reply(
+    fun() ->
+        ets:member(table_name(Cache), Key)
     end,
     Cache, CacheMap);
 
@@ -222,6 +226,23 @@ handle_cast({put, Key, Value, TTL, Cache}, CacheMap) ->
   cast_reply(
     fun() ->
         cache_put(Key, Value, TTL, Cache)
+    end,
+    Cache, CacheMap);
+
+handle_cast({touch, Key, Cache}, CacheMap) ->
+  cast_reply(
+    fun() ->
+        TableName = table_name(Cache),
+        case ets:lookup(TableName, Key) of
+          [{Key, {Value, [{ttl, TTL}, {time_ref, TimeRef}]}}] ->
+            %% Cancel the current timer.
+            erlang:cancel_timer(TimeRef),
+            %% Establish new timer
+            NewTimeRef = erlang:send_after(TTL*1000, ?CACHE_SRV, {destroy, Key, Cache}),
+            ets:insert(TableName, {Key, {Value, [{ttl, TTL}, {time_ref, NewTimeRef}]}});
+          _ ->
+            skip
+        end
     end,
     Cache, CacheMap);
 
