@@ -2,7 +2,7 @@
 
 -behavior(gen_server).
 
--vsn('0.9.6').
+-vsn('0.9.7').
 
 -define(CACHE_SRV, kncache_srv).
 
@@ -67,11 +67,7 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
-          [{Key, {Value, [{ttl, infinity}, _]}}] ->
-            %% Infinite cached value. Just return value.
-            {ok, Value};
-          [{Key, {Value, [{ttl, _TTL}, {time_ref, _TimeRef}]}}] ->
-            gen_server:cast(?CACHE_SRV, {touch, Key, Cache}),
+          [{Key, {Value, _}}] ->
             {ok, Value};
           %% No cached value.
           [] ->
@@ -238,7 +234,7 @@ handle_cast({touch, Key, Cache}, CacheMap) ->
             %% Cancel the current timer.
             erlang:cancel_timer(TimeRef),
             %% Establish new timer
-            NewTimeRef = erlang:send_after(TTL*1000, ?CACHE_SRV, {destroy, Key, Cache}),
+            NewTimeRef = erlang:send_after(TTL*1000, ?CACHE_SRV, {remove, Key, Cache}),
             ets:insert(TableName, {Key, {Value, [{ttl, TTL}, {time_ref, NewTimeRef}]}});
           _ ->
             skip
@@ -285,7 +281,7 @@ handle_cast(_Msg, CacheMap) ->
 %%
 %% Handle info
 %%
-handle_info({destroy, Key, Cache}, CacheMap) ->
+handle_info({remove, Key, Cache}, CacheMap) ->
   case valid_cache(Cache, CacheMap) of
     true ->
       ets:delete(table_name(Cache), Key);
@@ -335,7 +331,7 @@ cache_put(Key, Value, TTL, Cache) ->
               infinity ->
                 undefined;
               _ ->
-                erlang:send_after(TTL*1000, ?CACHE_SRV, {destroy, Key, Cache})
+                erlang:send_after(TTL*1000, ?CACHE_SRV, {remove, Key, Cache})
             end,
   ets:insert(table_name(Cache), {Key, {Value, [{ttl, TTL}, {time_ref, TimeRef}]}}),
   ok.
