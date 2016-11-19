@@ -35,7 +35,7 @@ handle_call(list, _From, CacheMap) ->
   {reply, maps:keys(CacheMap), CacheMap};
 
 handle_call({info, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         TableName = table_name(Cache),
         Size = ets:info(TableName, size),
@@ -47,14 +47,14 @@ handle_call({info, Cache}, _From, CacheMap) ->
     Cache, CacheMap);
 
 handle_call({size, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         ets:info(table_name(Cache), size)
     end,
     Cache, CacheMap);
 
 handle_call({ttl, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         ttl(Cache, CacheMap)
     end,
@@ -64,7 +64,7 @@ handle_call({get, Key, Cache}, From, CacheMap) ->
   handle_call({get, Key, undefined, Cache}, From, CacheMap);
 
 handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
           [{Key, {Value, _}}] ->
@@ -93,7 +93,7 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
     Cache, CacheMap);
 
 handle_call({touch, Key, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         TableName = table_name(Cache),
         case ets:lookup(TableName, Key) of
@@ -111,14 +111,14 @@ handle_call({touch, Key, Cache}, _From, CacheMap) ->
     Cache, CacheMap);
 
 handle_call({exists, Key, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         ets:member(table_name(Cache), Key)
     end,
     Cache, CacheMap);
 
 handle_call({peek, Key, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
           [{Key, {Value, [{ttl, infinity}, _]}}] ->
@@ -138,7 +138,7 @@ handle_call({peek, Key, Cache}, _From, CacheMap) ->
     Cache, CacheMap);
 
 handle_call({remove, Key, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         cache_delete(Key, Cache, false)
     end,
@@ -149,7 +149,7 @@ handle_call({keys, Cache}, From, CacheMap) ->
   handle_call({map, MapFun, Cache}, From, CacheMap);
 
 handle_call({map, MapFun, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         ets:foldl(fun({K,V}, Acc) -> [MapFun(K,V)] ++ Acc end,
                   [],
@@ -158,14 +158,14 @@ handle_call({map, MapFun, Cache}, _From, CacheMap) ->
     Cache, CacheMap);
 
 handle_call({match, KeyPattern, ValuePattern, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         ets:match(table_name(Cache), {KeyPattern, {ValuePattern, '_'}})
     end,
     Cache, CacheMap);
 
 handle_call({filter, PredFun, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         ets:foldl(
           fun({K,{V, _}}, Acc) ->
@@ -182,7 +182,7 @@ handle_call({filter, PredFun, Cache}, _From, CacheMap) ->
     Cache, CacheMap);
 
 handle_call({count, PredFun, Cache}, _From, CacheMap) ->
-  call_reply(
+  reply_to_call(
     fun() ->
         ets:foldl(
           fun({K,{V, _}}, Acc) ->
@@ -223,21 +223,21 @@ handle_cast({ttl, Cache, TTL}, CacheMap) ->
   {noreply, maps:put(Cache, TTL, CacheMap)};
 
 handle_cast({put, Key, Value, Cache}, CacheMap) ->
-  cast_reply(
+  reply_to_cast(
     fun() ->
         cache_put(Key, Value, ttl(Cache, CacheMap), Cache)
     end,
     Cache, CacheMap);
 
 handle_cast({put, Key, Value, TTL, Cache}, CacheMap) ->
-  cast_reply(
+  reply_to_cast(
     fun() ->
         cache_put(Key, Value, TTL, Cache)
     end,
     Cache, CacheMap);
 
 handle_cast({foreach, KVFun, Cache}, CacheMap) ->
-  cast_reply(
+  reply_to_cast(
     fun() ->
         ets:foldl(fun({K,V}, _Acc) ->
                       KVFun(K,V)
@@ -247,14 +247,14 @@ handle_cast({foreach, KVFun, Cache}, CacheMap) ->
     Cache, CacheMap);
 
 handle_cast({delete, Key, Cache}, CacheMap) ->
-  cast_reply(
+  reply_to_cast(
     fun() ->
         cache_delete(Key, Cache, true)
     end,
     Cache, CacheMap);
 
 handle_cast({flush, Cache}, CacheMap) ->
-  cast_reply(
+  reply_to_cast(
     fun() ->
         ets:delete_all_objects(table_name(Cache))
     end,
@@ -350,7 +350,12 @@ cache_delete(Key, Cache, Force) ->
       undefined
   end.
 
-call_reply(Fun, Cache, CacheMap) ->
+%%--------------------------------------------------------------------------------------------------
+%%
+%% Reply to gen_srv call using the specified function to generate the reply value
+%%
+%%--------------------------------------------------------------------------------------------------
+reply_to_call(Fun, Cache, CacheMap) ->
   case valid_cache(Cache, CacheMap) of
     true ->
       {reply, Fun(), CacheMap};
@@ -358,7 +363,12 @@ call_reply(Fun, Cache, CacheMap) ->
       {reply, {invalid_cache, Cache}, CacheMap}
   end.
 
-cast_reply(Fun, Cache, CacheMap) ->
+%%--------------------------------------------------------------------------------------------------
+%%
+%% Reply to gen_srv cast using the specified function to generate the reply value
+%%
+%%--------------------------------------------------------------------------------------------------
+reply_to_cast(Fun, Cache, CacheMap) ->
   case valid_cache(Cache, CacheMap) of
     true ->
       Fun();
@@ -367,6 +377,11 @@ cast_reply(Fun, Cache, CacheMap) ->
   end,
   {noreply, CacheMap}.
 
+%%--------------------------------------------------------------------------------------------------
+%%
+%% Determine if cache exists
+%%
+%%--------------------------------------------------------------------------------------------------
 valid_cache(Cache, CacheMap) when is_atom(Cache) ->
   case ets:info(table_name(Cache)) of
     undefined ->
