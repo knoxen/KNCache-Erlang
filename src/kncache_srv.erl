@@ -95,7 +95,18 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
 handle_call({touch, Key, Cache}, _From, CacheMap) ->
   call_reply(
     fun() ->
-        ets:member(table_name(Cache), Key)
+        TableName = table_name(Cache),
+        case ets:lookup(TableName, Key) of
+          [{Key, {Value, [{ttl, TTL}, {time_ref, TimeRef}]}}] ->
+            %% Cancel the current timer.
+            erlang:cancel_timer(TimeRef),
+            %% Establish new timer
+            NewTimeRef = erlang:send_after(TTL*1000, ?CACHE_SRV, {remove, Key, Cache}),
+            ets:insert(TableName, {Key, {Value, [{ttl, TTL}, {time_ref, NewTimeRef}]}}),
+            {ok, Value};
+          _ ->
+            undefined
+        end
     end,
     Cache, CacheMap);
 
@@ -222,23 +233,6 @@ handle_cast({put, Key, Value, TTL, Cache}, CacheMap) ->
   cast_reply(
     fun() ->
         cache_put(Key, Value, TTL, Cache)
-    end,
-    Cache, CacheMap);
-
-handle_cast({touch, Key, Cache}, CacheMap) ->
-  cast_reply(
-    fun() ->
-        TableName = table_name(Cache),
-        case ets:lookup(TableName, Key) of
-          [{Key, {Value, [{ttl, TTL}, {time_ref, TimeRef}]}}] ->
-            %% Cancel the current timer.
-            erlang:cancel_timer(TimeRef),
-            %% Establish new timer
-            NewTimeRef = erlang:send_after(TTL*1000, ?CACHE_SRV, {remove, Key, Cache}),
-            ets:insert(TableName, {Key, {Value, [{ttl, TTL}, {time_ref, NewTimeRef}]}});
-          _ ->
-            skip
-        end
     end,
     Cache, CacheMap);
 

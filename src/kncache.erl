@@ -10,7 +10,6 @@
         ,destroy/1
         ]).
 
-
 %% Cache Info
 -export([list/0
         ,info/1
@@ -135,7 +134,7 @@ put(Key, Value, TTL, Cache) ->
   gen_server:cast(?CACHE_SRV, {put, Key, Value, TTL, Cache}).
 
 %%------------------------------------------------------------------------------------------
-%% Get cache Key value
+%% Get cache key value
 %%------------------------------------------------------------------------------------------
 get(Key, Cache) ->
   gen_server:call(?CACHE_SRV, {get, Key, Cache}).
@@ -147,13 +146,13 @@ get(Key, ValueFn, Cache) ->
   gen_server:call(?CACHE_SRV, {get, Key, ValueFn, Cache}).
 
 %%------------------------------------------------------------------------------------------
-%% Refresh cache entry TTL
+%% Get cache key value and refresh TTL
 %%------------------------------------------------------------------------------------------
 touch(Key, Cache) ->
-  gen_server:cast(?CACHE_SRV, {touch, Key, Cache}).
+  gen_server:call(?CACHE_SRV, {touch, Key, Cache}).
 
 %%------------------------------------------------------------------------------------------
-%% Does cache entry exist?
+%% Check if cache entry exists
 %%------------------------------------------------------------------------------------------
 exists(Key, Cache) ->
   gen_server:call(?CACHE_SRV, {exists, Key, Cache}).
