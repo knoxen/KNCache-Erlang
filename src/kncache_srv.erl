@@ -2,9 +2,10 @@
 
 -behavior(gen_server).
 
--vsn('0.9.7').
+-vsn('0.9.9').
 
 -define(CACHE_SRV, kncache_srv).
+-define(KN_EVICT_CACHE, kn_evict_fn).
 
 %%
 %% Gen server API
@@ -32,7 +33,7 @@ init([]) ->
 %% Handle calls
 %%
 handle_call(list, _From, CacheMap) ->
-  {reply, maps:keys(CacheMap), CacheMap};
+  {reply, lists:delete(?KN_EVICT_CACHE, maps:keys(CacheMap)), CacheMap};
 
 handle_call({info, Cache}, _From, CacheMap) ->
   reply_to_call(
@@ -101,7 +102,7 @@ handle_call({touch, Key, Cache}, _From, CacheMap) ->
             %% Cancel the current timer.
             erlang:cancel_timer(TimeRef),
             %% Establish new timer
-            NewTimeRef = erlang:send_after(TTL*1000, ?CACHE_SRV, {remove, Key, Cache}),
+            NewTimeRef = erlang:send_after(TTL*1000, ?CACHE_SRV, {evict, Key, Cache}),
             ets:insert(TableName, {Key, {Value, [{ttl, TTL}, {time_ref, NewTimeRef}]}}),
             {ok, Value};
           _ ->
@@ -246,6 +247,24 @@ handle_cast({foreach, KVFun, Cache}, CacheMap) ->
     end,
     Cache, CacheMap);
 
+handle_cast({evict_set, EvictFn, Cache}, CacheMap) ->
+  NewCacheMap =
+    case valid_cache(?KN_EVICT_CACHE, CacheMap) of
+      false ->
+        make_cache(?KN_EVICT_CACHE, infinity, CacheMap);
+      true ->
+        CacheMap
+    end,
+  cache_put(Cache, EvictFn, infinity, ?KN_EVICT_CACHE),
+  {noreply, NewCacheMap};
+
+handle_cast({evict_remove, Cache}, CacheMap) ->
+  reply_to_cast(
+    fun() ->
+        cache_delete(Cache, ?KN_EVICT_CACHE, true)
+    end,
+    Cache, CacheMap);
+
 handle_cast({delete, Key, Cache}, CacheMap) ->
   reply_to_cast(
     fun() ->
@@ -275,10 +294,25 @@ handle_cast(_Msg, CacheMap) ->
 %%
 %% Handle info
 %%
-handle_info({remove, Key, Cache}, CacheMap) ->
+handle_info({evict, Key, Cache}, CacheMap) ->
   case valid_cache(Cache, CacheMap) of
     true ->
-      ets:delete(table_name(Cache), Key);
+      case cache_delete(Key, Cache, true) of
+        {ok, Value} ->
+          case valid_cache(?KN_EVICT_CACHE, CacheMap) of
+            true ->
+              case ets:lookup(table_name(?KN_EVICT_CACHE), Cache) of
+                [{Cache, {EvictFn, _}}] ->
+                  EvictFn(Key, Value);
+                _ ->
+                  skip
+              end;
+            false ->
+              skip
+          end;
+        _ ->
+          skip
+      end;
     false ->
       skip
   end,
@@ -325,7 +359,7 @@ cache_put(Key, Value, TTL, Cache) ->
               infinity ->
                 undefined;
               _ ->
-                erlang:send_after(TTL*1000, ?CACHE_SRV, {remove, Key, Cache})
+                erlang:send_after(TTL*1000, ?CACHE_SRV, {evict, Key, Cache})
             end,
   ets:insert(table_name(Cache), {Key, {Value, [{ttl, TTL}, {time_ref, TimeRef}]}}),
   ok.

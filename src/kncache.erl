@@ -32,6 +32,10 @@
         ]).
 
 %% Cache Transforms
+-export([evict/2
+        ,evict/3]).
+
+%% Cache Transforms
 -export([foreach/2
         ,map/2
         ,match/3
@@ -174,6 +178,17 @@ remove(Key, Cache) ->
 %%------------------------------------------------------------------------------------------
 delete(Key, Cache) ->
   gen_server:cast(?CACHE_SRV, {delete, Key, Cache}).
+
+%%==========================================================================================
+%%
+%% Cache Evict Functions
+%%
+%%==========================================================================================
+evict(set, EvictFn, Cache) ->
+  gen_server:cast(?CACHE_SRV, {evict_set, EvictFn, Cache}).
+
+evict(remove, Cache) ->
+  gen_server:cast(?CACHE_SRV, {evict_remove, Cache}).
 
 %%==========================================================================================
 %%
