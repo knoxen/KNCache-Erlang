@@ -247,18 +247,23 @@ handle_cast({foreach, KVFun, Cache}, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_cast({evict_set, EvictFn, Cache}, CacheMap) ->
-  NewCacheMap =
-    case valid_cache(?KN_EVICT_CACHE, CacheMap) of
-      false ->
-        make_cache(?KN_EVICT_CACHE, infinity, CacheMap);
-      true ->
-        CacheMap
-    end,
-  cache_put(Cache, EvictFn, infinity, ?KN_EVICT_CACHE),
-  {noreply, NewCacheMap};
+handle_cast({evict_fn_set, EvictFn, Cache}, CacheMap) ->
+  case erlang:fun_info(EvictFn, arity) of
+    {arity, 2} ->
+      NewCacheMap =
+        case valid_cache(?KN_EVICT_CACHE, CacheMap) of
+          false ->
+            make_cache(?KN_EVICT_CACHE, infinity, CacheMap);
+          true ->
+            CacheMap
+        end,
+      cache_put(Cache, EvictFn, infinity, ?KN_EVICT_CACHE),
+      {noreply, NewCacheMap};
+    _ ->
+      {noreply, CacheMap}
+  end;
 
-handle_cast({evict_remove, Cache}, CacheMap) ->
+handle_cast({evict_fn_remove, Cache}, CacheMap) ->
   reply_to_cast(
     fun() ->
         cache_delete(Cache, ?KN_EVICT_CACHE, true)

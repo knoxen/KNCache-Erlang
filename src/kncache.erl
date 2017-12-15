@@ -31,9 +31,9 @@
         ,delete/2
         ]).
 
-%% Cache Transforms
--export([evict/2
-        ,evict/3]).
+%% Cache Eviction Functions
+-export([evict_fn/2
+        ,evict_fn/3]).
 
 %% Cache Transforms
 -export([foreach/2
@@ -184,11 +184,11 @@ delete(Key, Cache) ->
 %% Cache Evict Functions
 %%
 %%==========================================================================================
-evict(set, EvictFn, Cache) ->
-  gen_server:cast(?CACHE_SRV, {evict_set, EvictFn, Cache}).
+evict_fn(set, EvictFn, Cache) ->
+  gen_server:cast(?CACHE_SRV, {evict_fn_set, EvictFn, Cache}).
 
-evict(remove, Cache) ->
-  gen_server:cast(?CACHE_SRV, {evict_remove, Cache}).
+evict_fn(remove, Cache) ->
+  gen_server:cast(?CACHE_SRV, {evict_fn_remove, Cache}).
 
 %%==========================================================================================
 %%
