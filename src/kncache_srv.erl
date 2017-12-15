@@ -2,7 +2,7 @@
 
 -behavior(gen_server).
 
--vsn('0.9.9').
+-vsn('0.10.0').
 
 -define(CACHE_SRV, kncache_srv).
 -define(KN_EVICT_CACHE, kn_evict_fn).
@@ -11,6 +11,7 @@
 %% Gen server API
 %%
 -export([start_link/0,
+         start_link/1,
          init/1,
          handle_info/2,
          handle_call/3,
@@ -23,10 +24,16 @@
 %% Gen Server Impl
 %%
 start_link() ->
-  gen_server:start_link({local, ?CACHE_SRV}, ?MODULE, [], []).
+  start_link([]).
 
-init([]) ->
-  CacheMap = maps:new(), 
+start_link(Caches) ->
+  gen_server:start_link({local, ?CACHE_SRV}, ?MODULE, Caches, []).
+
+init(Caches) when is_list(Caches) ->
+  CacheMap = lists:foldl(
+               fun({Cache,TTL},CacheMap) -> 
+                   make_cache(Cache, TTL, CacheMap) 
+               end, maps:new(), Caches),
   {ok, CacheMap}.
 
 %%
@@ -309,16 +316,16 @@ handle_info({evict, Key, Cache}, CacheMap) ->
                 [{Cache, {EvictFn, _}}] ->
                   EvictFn(Key, Value);
                 _ ->
-                  skip
+                  noop
               end;
             false ->
-              skip
+              noop
           end;
         _ ->
-          skip
+          noop
       end;
     false ->
-      skip
+      noop
   end,
   {noreply, CacheMap};
 
@@ -378,7 +385,7 @@ cache_delete(Key, Cache, Force) ->
         true ->
           ets:delete(TableName, Key);
         false ->
-          skip
+          noop
       end,
       {ok, Value};
     [{Key, {Value, [{ttl, _}, {time_ref, TimeRef}]}}] ->
@@ -416,7 +423,7 @@ reply_to_cast(Fun, Cache, CacheMap) ->
     true ->
       Fun();
     false ->
-      skip
+      noop
   end,
   {noreply, CacheMap}.
 

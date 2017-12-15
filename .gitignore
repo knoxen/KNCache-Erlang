@@ -1,5 +1,6 @@
-# rebar/relx
 _build
+ebin
+.rebar3
 
 # emacs
 *~
