@@ -1,8 +1,8 @@
 {application, kncache,
  [{description, "ETS backed cache w/ TTL per cache and per key"}
- ,{vsn, "0.10.0"}
- ,{registered, []}
  ,{mod, {kncache_app, []}}
+ ,{vsn, git}
+ ,{registered, []}
  ,{applications,
    [kernel
    ,stdlib
