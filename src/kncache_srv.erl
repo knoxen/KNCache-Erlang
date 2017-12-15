@@ -287,8 +287,7 @@ handle_cast({flush, Cache}, CacheMap) ->
 handle_cast({destroy, Cache}, CacheMap) ->
   case valid_cache(Cache, CacheMap) of
     true ->
-      ets:delete(table_name(Cache)),
-      {noreply, maps:remove(Cache, CacheMap)};
+      {noreply, destroy_cache(Cache, CacheMap)};
     false ->
       {noreply, CacheMap}
   end;
@@ -329,7 +328,8 @@ handle_info(_Info, CacheMap) ->
 %%
 %% 
 %%
-terminate(_Reason, _CacheMap) ->
+terminate(_Reason, CacheMap) ->
+  lists:foreach(fun(Cache) -> destroy_cache(Cache, CacheMap) end, maps:keys(CacheMap)),
   ok.
 
 code_change(_OldVsn, CacheMap, _Extra) ->
@@ -388,6 +388,10 @@ cache_delete(Key, Cache, Force) ->
     _ ->
       undefined
   end.
+
+destroy_cache(Cache, CacheMap) ->
+  ets:delete(table_name(Cache)),
+  maps:remove(Cache, CacheMap).
 
 %%--------------------------------------------------------------------------------------------------
 %%
