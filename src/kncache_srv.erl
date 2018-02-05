@@ -10,7 +10,8 @@
 %%
 %% Gen server API
 %%
--export([start_link/0,
+-export([child_spec/1,
+         start_link/0,
          start_link/1,
          init/1,
          handle_info/2,
@@ -20,6 +21,15 @@
          terminate/2
         ]).
 
+child_spec(Caches) ->
+  #{id => kncache_srv,
+    start => {kncache_srv, start_link, Caches},
+    type => worker,
+    restart => permanent,
+    shutdown => 5000,
+    modules => [kncache_srv]
+   }.
+  
 %%
 %% Gen Server Impl
 %%
