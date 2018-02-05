@@ -4,47 +4,65 @@
 
 -define(CACHE_SRV, kncache_srv).
 
+-export([child_spec/1,
+         start_link/1
+        ]).
+
 %% Cache Lifecycle
--export([make/1
-        ,make/2
-        ,make_caches/1
-        ,flush/1
-        ,destroy/1
+-export([make/1,
+         make/2,
+         make_caches/1,
+         flush/1,
+         destroy/1
         ]).
 
 %% Cache Info
--export([list/0
-        ,info/1
-        ,size/1
-        ,ttl/1
-        ,ttl/2
-        ,keys/1
+-export([list/0,
+         info/1,
+         size/1,
+         ttl/1,
+         ttl/2,
+         keys/1
         ]).
 
 %% Cache Access
--export([put/3
-        ,put/4
-        ,get/2
-        ,get/3
-        ,exists/2
-        ,touch/2
-        ,peek/2
-        ,remove/2
-        ,delete/2
+-export([put/3,
+         put/4,
+         get/2,
+         get/3,
+         exists/2,
+         touch/2,
+         peek/2,
+         remove/2,
+         delete/2
         ]).
 
 %% Cache Eviction Functions
--export([evict_fn/2
-        ,evict_fn/3]).
+-export([evict_fn/2,
+         evict_fn/3]).
 
 %% Cache Transforms
--export([foreach/2
-        ,map/2
-        ,match/3
-        ,filter/2
-        ,count/2
-        ,dump/1
+-export([foreach/2,
+         map/2,
+         match/3,
+         filter/2,
+         count/2,
+         dump/1
         ]).
+
+
+child_spec(Caches) ->
+  #{id => kncache_srv,
+    start => {kncache_srv, start_link, Caches},
+    type => worker,
+    restart => permanent,
+    shutdown => 5000,
+    modules => [kncache_srv]
+   }.
+
+start_link(Caches) ->
+  gen_server:start_link({local, ?CACHE_SRV}, ?MODULE, Caches, []).
+
 
 %%==================================================================================================
 %%
