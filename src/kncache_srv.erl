@@ -64,6 +64,26 @@ handle_call({info, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
+handle_call({info, Cache, Key}, _From, CacheMap) ->
+  reply_to_call(
+    fun() ->
+        case ets:lookup(table_name(Cache), Key) of
+          [{Key, {Value, [{ttl, infinity}, _]}}] ->
+          %% Infinite cached value
+            {Value, [{expiry, never}, {ttl, infinity}]};
+          [{Key, {Value, [{ttl, TTL}, {time_ref, TimeRef}]}}] ->
+            case erlang:read_timer(TimeRef) of
+              false ->
+                {Value, [{exiry, expired}, {ttl, TTL}]};
+              TimeLeft ->
+                {Value, [{expiry, TimeLeft / 1000}, {ttl, TTL}]}
+            end;
+          [] ->
+            undefined
+        end
+    end,
+    Cache, CacheMap);
+
 handle_call({size, Cache}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
@@ -132,26 +152,6 @@ handle_call({exists, Cache, Key}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
         ets:member(table_name(Cache), Key)
-    end,
-    Cache, CacheMap);
-
-handle_call({peek, Cache, Key}, _From, CacheMap) ->
-  reply_to_call(
-    fun() ->
-        case ets:lookup(table_name(Cache), Key) of
-          [{Key, {Value, [{ttl, infinity}, _]}}] ->
-          %% Infinite cached value
-            {Value, [{expiry, never}, {ttl, infinity}]};
-          [{Key, {Value, [{ttl, TTL}, {time_ref, TimeRef}]}}] ->
-            case erlang:read_timer(TimeRef) of
-              false ->
-                {Value, [{exiry, expired}, {ttl, TTL}]};
-              TimeLeft ->
-                {Value, [{expiry, TimeLeft / 1000}, {ttl, TTL}]}
-            end;
-          [] ->
-            undefined
-        end
     end,
     Cache, CacheMap);
 
