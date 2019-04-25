@@ -78,10 +78,10 @@ handle_call({ttl, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_call({get, Key, Cache}, From, CacheMap) ->
-  handle_call({get, Key, undefined, Cache}, From, CacheMap);
+handle_call({get, Cache, Key}, From, CacheMap) ->
+  handle_call({get, Cache, Key, undefined}, From, CacheMap);
 
-handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
+handle_call({get, Cache, Key, ValueFun}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
@@ -98,11 +98,11 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
                 case ValueFun() of
                   {NewValue, TTL} ->
                     %% Value Fun specifies TTL
-                    cache_put(Key, NewValue, TTL, Cache),
+                    cache_put(Cache, Key, NewValue, TTL),
                     {ok, NewValue};
                   NewValue ->
                     %% Use Cache default TTL
-                    cache_put(Key, NewValue, ttl(Cache, CacheMap), Cache),
+                    cache_put(Cache, Key, NewValue, ttl(Cache, CacheMap)),
                     {ok, NewValue}
                 end
             end
@@ -110,7 +110,7 @@ handle_call({get, Key, ValueFun, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_call({touch, Key, Cache}, _From, CacheMap) ->
+handle_call({touch, Cache, Key}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
         TableName = table_name(Cache),
@@ -119,7 +119,7 @@ handle_call({touch, Key, Cache}, _From, CacheMap) ->
             %% Cancel the current timer.
             erlang:cancel_timer(TimeRef),
             %% Establish new timer
-            NewTimeRef = erlang:send_after(TTL*1000, ?CACHE_SRV, {evict, Key, Cache}),
+            NewTimeRef = erlang:send_after(TTL*1000, ?CACHE_SRV, {evict, Cache, Key}),
             ets:insert(TableName, {Key, {Value, [{ttl, TTL}, {time_ref, NewTimeRef}]}}),
             {ok, Value};
           _ ->
@@ -128,14 +128,14 @@ handle_call({touch, Key, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_call({exists, Key, Cache}, _From, CacheMap) ->
+handle_call({exists, Cache, Key}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
         ets:member(table_name(Cache), Key)
     end,
     Cache, CacheMap);
 
-handle_call({peek, Key, Cache}, _From, CacheMap) ->
+handle_call({peek, Cache, Key}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
@@ -155,18 +155,18 @@ handle_call({peek, Key, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_call({remove, Key, Cache}, _From, CacheMap) ->
+handle_call({remove, Cache, Key}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
-        cache_delete(Key, Cache, false)
+        cache_delete(Cache, Key, false)
     end,
     Cache, CacheMap);
 
 handle_call({keys, Cache}, From, CacheMap) ->
   MapFun = fun(K,_V) -> K end,
-  handle_call({map, MapFun, Cache}, From, CacheMap);
+  handle_call({map, Cache, MapFun}, From, CacheMap);
 
-handle_call({map, MapFun, Cache}, _From, CacheMap) ->
+handle_call({map, Cache, MapFun}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
         ets:foldl(fun({K,V}, Acc) -> [MapFun(K,V)] ++ Acc end,
@@ -175,14 +175,14 @@ handle_call({map, MapFun, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_call({match, KeyPattern, ValuePattern, Cache}, _From, CacheMap) ->
+handle_call({match, Cache, KeyPattern, ValuePattern}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
         ets:match(table_name(Cache), {KeyPattern, {ValuePattern, '_'}})
     end,
     Cache, CacheMap);
 
-handle_call({filter, PredFun, Cache}, _From, CacheMap) ->
+handle_call({filter, Cache, PredFun}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
         ets:foldl(
@@ -199,7 +199,7 @@ handle_call({filter, PredFun, Cache}, _From, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_call({count, PredFun, Cache}, _From, CacheMap) ->
+handle_call({count, Cache, PredFun}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
         ets:foldl(
@@ -217,7 +217,7 @@ handle_call({count, PredFun, Cache}, _From, CacheMap) ->
     Cache, CacheMap);
 
 handle_call({dump, Cache}, From, CacheMap) ->
-  handle_call({match, '$1', '$2', Cache}, From, CacheMap);
+  handle_call({match, Cache, '$1', '$2'}, From, CacheMap);
 
 handle_call(Req, _From, CacheMap) ->
   {reply, {invalid_request, Req}, CacheMap}.
@@ -240,21 +240,21 @@ handle_cast({make_caches, CacheList}, CacheMap) ->
 handle_cast({ttl, Cache, TTL}, CacheMap) ->
   {noreply, maps:put(Cache, TTL, CacheMap)};
 
-handle_cast({put, Key, Value, Cache}, CacheMap) ->
+handle_cast({put, Cache, Key, Value}, CacheMap) ->
   reply_to_cast(
     fun() ->
-        cache_put(Key, Value, ttl(Cache, CacheMap), Cache)
+        cache_put(Cache, Key, Value, ttl(Cache, CacheMap))
     end,
     Cache, CacheMap);
 
-handle_cast({put, Key, Value, TTL, Cache}, CacheMap) ->
+handle_cast({put, Cache, Key, Value, TTL}, CacheMap) ->
   reply_to_cast(
     fun() ->
-        cache_put(Key, Value, TTL, Cache)
+        cache_put(Cache, Key, Value, TTL)
     end,
     Cache, CacheMap);
 
-handle_cast({foreach, KVFun, Cache}, CacheMap) ->
+handle_cast({foreach, Cache, KVFun}, CacheMap) ->
   reply_to_cast(
     fun() ->
         ets:foldl(fun({K,V}, _Acc) ->
@@ -264,7 +264,7 @@ handle_cast({foreach, KVFun, Cache}, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_cast({evict_fn_set, EvictFn, Cache}, CacheMap) ->
+handle_cast({evict_fn_set, Cache, EvictFn}, CacheMap) ->
   case erlang:fun_info(EvictFn, arity) of
     {arity, 2} ->
       NewCacheMap =
@@ -287,10 +287,10 @@ handle_cast({evict_fn_remove, Cache}, CacheMap) ->
     end,
     Cache, CacheMap);
 
-handle_cast({delete, Key, Cache}, CacheMap) ->
+handle_cast({delete, Cache, Key}, CacheMap) ->
   reply_to_cast(
     fun() ->
-        cache_delete(Key, Cache, true)
+        cache_delete(Cache, Key, true)
     end,
     Cache, CacheMap);
 
@@ -315,10 +315,10 @@ handle_cast(_Msg, CacheMap) ->
 %%
 %% Handle info
 %%
-handle_info({evict, Key, Cache}, CacheMap) ->
+handle_info({evict, Cache, Key}, CacheMap) ->
   case valid_cache(Cache, CacheMap) of
     true ->
-      case cache_delete(Key, Cache, true) of
+      case cache_delete(Cache, Key, true) of
         {ok, Value} ->
           case valid_cache(?KN_EVICT_CACHE, CacheMap) of
             true ->
@@ -376,17 +376,17 @@ ttl(Cache, CacheMap) ->
       TTL
   end.
 
-cache_put(Key, Value, TTL, Cache) ->
+cache_put(Cache, Key, Value, TTL) ->
   TimeRef = case TTL of
               infinity ->
                 undefined;
               _ ->
-                erlang:send_after(TTL*1000, ?CACHE_SRV, {evict, Key, Cache})
+                erlang:send_after(TTL*1000, ?CACHE_SRV, {evict, Cache, Key})
             end,
   ets:insert(table_name(Cache), {Key, {Value, [{ttl, TTL}, {time_ref, TimeRef}]}}),
   ok.
 
-cache_delete(Key, Cache, Force) ->
+cache_delete(Cache, Key, Force) ->
   TableName = table_name(Cache),
   case ets:lookup(TableName, Key) of
     [{Key, {Value, [{ttl, infinity}, _]}}] ->

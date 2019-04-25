@@ -148,66 +148,66 @@ keys(Cache) ->
 %%--------------------------------------------------------------------------------------------------
 %% Put Key/Value with default cache TTL
 %%--------------------------------------------------------------------------------------------------
-put(Key, Value, Cache) ->
-  gen_server:cast(?CACHE_SRV, {put, Key, Value, Cache}).
+put(Cache, Key, Value) ->
+  gen_server:cast(?CACHE_SRV, {put, Cache, Key, Value}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Put Key/Value with TTL
 %%--------------------------------------------------------------------------------------------------
-put(Key, Value, TTL, Cache) ->
-  gen_server:cast(?CACHE_SRV, {put, Key, Value, TTL, Cache}).
+put(Cache, Key, Value, TTL) when is_integer(TTL) ->
+  gen_server:cast(?CACHE_SRV, {put, Cache, Key, Value, TTL}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Get cache key value
 %%--------------------------------------------------------------------------------------------------
-get(Key, Cache) ->
-  gen_server:call(?CACHE_SRV, {get, Key, Cache}).
+get(Cache, Key) ->
+  gen_server:call(?CACHE_SRV, {get, Cache, Key}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Get cache value with cache miss function
 %%--------------------------------------------------------------------------------------------------
-get(Key, ValueFn, Cache) ->
-  gen_server:call(?CACHE_SRV, {get, Key, ValueFn, Cache}).
+get(Cache, Key, ValueFn) ->
+  gen_server:call(?CACHE_SRV, {get, Cache, Key, ValueFn}).
+
+%%--------------------------------------------------------------------------------------------------
+%% Get info for cache entry
+%%--------------------------------------------------------------------------------------------------
+peek(Cache, Key) ->
+  gen_server:call(?CACHE_SRV, {peek, Cache, Key}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Get cache key value and refresh TTL
 %%--------------------------------------------------------------------------------------------------
-touch(Key, Cache) ->
-  gen_server:call(?CACHE_SRV, {touch, Key, Cache}).
+touch(Cache, Key) ->
+  gen_server:call(?CACHE_SRV, {touch, Cache, Key}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Check if cache entry exists
 %%--------------------------------------------------------------------------------------------------
-exists(Key, Cache) ->
-  gen_server:call(?CACHE_SRV, {exists, Key, Cache}).
-
-%%--------------------------------------------------------------------------------------------------
-%% Peek at cache entry
-%%--------------------------------------------------------------------------------------------------
-peek(Key, Cache) ->
-  gen_server:call(?CACHE_SRV, {peek, Key, Cache}).
+exists(Cache, Key) ->
+  gen_server:call(?CACHE_SRV, {exists, Cache, Key}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Remove cache entry and return value
 %%--------------------------------------------------------------------------------------------------
-remove(Key, Cache) ->
-  gen_server:call(?CACHE_SRV, {remove, Key, Cache}).
+remove(Cache, Key) ->
+  gen_server:call(?CACHE_SRV, {remove, Cache, Key}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Delete cache entry
 %%--------------------------------------------------------------------------------------------------
-delete(Key, Cache) ->
-  gen_server:cast(?CACHE_SRV, {delete, Key, Cache}).
+delete(Cache, Key) ->
+  gen_server:cast(?CACHE_SRV, {delete, Cache, Key}).
 
 %%==================================================================================================
 %%
 %% Cache Evict Functions
 %%
 %%==================================================================================================
-evict_fn(set, EvictFn, Cache) ->
-  gen_server:cast(?CACHE_SRV, {evict_fn_set, EvictFn, Cache}).
+evict_fn(Cache, set, EvictFn) ->
+  gen_server:cast(?CACHE_SRV, {evict_fn_set, Cache, EvictFn}).
 
-evict_fn(remove, Cache) ->
+evict_fn(Cache, remove) ->
   gen_server:cast(?CACHE_SRV, {evict_fn_remove, Cache}).
 
 %%==================================================================================================
@@ -218,35 +218,35 @@ evict_fn(remove, Cache) ->
 %%--------------------------------------------------------------------------------------------------
 %% Perform function on each cache entry
 %%--------------------------------------------------------------------------------------------------
-foreach(KVFun, Cache) ->
-  gen_server:cast(?CACHE_SRV, {foreach, KVFun, Cache}).
+foreach(Cache, KVFun) ->
+  gen_server:cast(?CACHE_SRV, {foreach, Cache, KVFun}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Return list of function run on each cache entry
 %%--------------------------------------------------------------------------------------------------
-map(KVFun, Cache) ->
-  gen_server:call(?CACHE_SRV, {map, KVFun, Cache}).
+map(Cache, KVFun) ->
+  gen_server:call(?CACHE_SRV, {map, Cache, KVFun}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Return list of Key / Value entries that match patterns
 %%--------------------------------------------------------------------------------------------------
-match(KeyPattern, ValuePattern, Cache) ->
-  gen_server:call(?CACHE_SRV, {match, KeyPattern, ValuePattern, Cache}).
+match(Cache, KeyPattern, ValuePattern) ->
+  gen_server:call(?CACHE_SRV, {match, Cache, KeyPattern, ValuePattern}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Return list of entries that KVFun returns true
 %%--------------------------------------------------------------------------------------------------
-filter(KVFun, Cache) ->
-  gen_server:call(?CACHE_SRV, {filter, KVFun, Cache}).
+filter(Cache, KVFun) ->
+  gen_server:call(?CACHE_SRV, {filter, Cache, KVFun}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Return count of entries that KVFun returns true
 %%--------------------------------------------------------------------------------------------------
-count(KVFun, Cache) ->
-  gen_server:call(?CACHE_SRV, {count, KVFun, Cache}).
+count(Cache, KVFun) ->
+  gen_server:call(?CACHE_SRV, {count, Cache, KVFun}).
 
 %%--------------------------------------------------------------------------------------------------
-%% Return list of all Key / Value entries
+%% Return list of all cache entries
 %%--------------------------------------------------------------------------------------------------
 dump(Cache) ->
   gen_server:call(?CACHE_SRV, {dump, Cache}).
