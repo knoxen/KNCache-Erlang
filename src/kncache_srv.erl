@@ -101,7 +101,7 @@ handle_call({ttl, Cache}, _From, CacheMap) ->
 handle_call({get, Cache, Key}, From, CacheMap) ->
   handle_call({get, Cache, Key, undefined}, From, CacheMap);
 
-handle_call({get, Cache, Key, ValueFun}, _From, CacheMap) ->
+handle_call({get, Cache, Key, MissFn}, _From, CacheMap) ->
   reply_to_call(
     fun() ->
         case ets:lookup(table_name(Cache), Key) of
@@ -109,22 +109,22 @@ handle_call({get, Cache, Key, ValueFun}, _From, CacheMap) ->
             {ok, Value};
           %% No cached value.
           [] ->
-            case ValueFun of
+            case MissFn of
               undefined ->
                 %% No cached value and no Value Fun to generate one.
                 undefined;
               _ ->
-                %% Use Value Fun to generate a new value
-                case ValueFun() of
-                  {NewValue, TTL} ->
-                    %% Value Fun specifies TTL
-                    cache_put(Cache, Key, NewValue, TTL),
-                    {ok, NewValue};
-                  NewValue ->
-                    %% Use Cache default TTL
-                    cache_put(Cache, Key, NewValue, ttl(Cache, CacheMap)),
-                    {ok, NewValue}
-                end
+                %% Use miss function to generate a new value and optional TTL
+                {NewValue, TTL} =
+                  case MissFn() of
+                    {V, T} ->
+                      {V, T};
+                    
+                    V ->
+                      {V, ttl(Cache, CacheMap)}
+                  end,
+                cache_put(Cache, Key, NewValue, TTL),
+                {ok, NewValue}
             end
         end
     end,

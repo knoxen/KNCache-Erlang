@@ -181,8 +181,8 @@ get(Cache, Key) ->
 %%--------------------------------------------------------------------------------------------------
 %% Get cache value with cache miss function
 %%--------------------------------------------------------------------------------------------------
-get(Cache, Key, ValueFn) ->
-  gen_server:call(?CACHE_SRV, {get, Cache, Key, ValueFn}).
+get(Cache, Key, MissFn) ->
+  gen_server:call(?CACHE_SRV, {get, Cache, Key, MissFn}).
 
 %%--------------------------------------------------------------------------------------------------
 %% Get cache key value and refresh TTL
