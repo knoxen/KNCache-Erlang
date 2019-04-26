@@ -73,12 +73,15 @@ start_link(Caches) ->
 %% Make cache with infinite TTL
 %%--------------------------------------------------------------------------------------------------
 make(Cache) ->
-  gen_server:cast(?CACHE_SRV, {make, Cache, infinity}).
+  make(Cache, infinity).
 
 %%--------------------------------------------------------------------------------------------------
 %% Make cache with TTL
 %%--------------------------------------------------------------------------------------------------
-make(Cache, TTL) ->
+make(Cache, infinity) ->
+  gen_server:cast(?CACHE_SRV, {make, Cache, infinity});
+
+make(Cache, TTL) when is_integer(TTL) ->
   gen_server:cast(?CACHE_SRV, {make, Cache, TTL}).
 
 %%--------------------------------------------------------------------------------------------------
@@ -137,7 +140,10 @@ ttl(Cache) ->
 %%--------------------------------------------------------------------------------------------------
 %% Set cache TTL (in seconds)
 %%--------------------------------------------------------------------------------------------------
-ttl(Cache, TTL) ->
+ttl(Cache, infinity) ->
+  gen_server:cast(?CACHE_SRV, {ttl, Cache, infinity});
+
+ttl(Cache, TTL) when is_integer(TTL) ->
   gen_server:cast(?CACHE_SRV, {ttl, Cache, TTL}).
 
 %%--------------------------------------------------------------------------------------------------
@@ -160,6 +166,9 @@ put(Cache, Key, Value) ->
 %%--------------------------------------------------------------------------------------------------
 %% Put Key/Value with TTL
 %%--------------------------------------------------------------------------------------------------
+put(Cache, Key, Value, infinity) ->
+  gen_server:cast(?CACHE_SRV, {put, Cache, Key, Value, infinity});
+
 put(Cache, Key, Value, TTL) when is_integer(TTL) ->
   gen_server:cast(?CACHE_SRV, {put, Cache, Key, Value, TTL}).
 
