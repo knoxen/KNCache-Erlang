@@ -22,7 +22,7 @@
          info/2,
          size/1,
          ttl/1,
-         ttl/2,
+         set_ttl/2,
          keys/1
         ]).
 
@@ -140,10 +140,10 @@ ttl(Cache) ->
 %%--------------------------------------------------------------------------------------------------
 %% Set cache TTL (in seconds)
 %%--------------------------------------------------------------------------------------------------
-ttl(Cache, infinity) ->
+set_ttl(Cache, infinity) ->
   gen_server:cast(?CACHE_SRV, {ttl, Cache, infinity});
 
-ttl(Cache, TTL) when is_integer(TTL) ->
+set_ttl(Cache, TTL) when is_integer(TTL) ->
   gen_server:cast(?CACHE_SRV, {ttl, Cache, TTL}).
 
 %%--------------------------------------------------------------------------------------------------
